@@ -22,7 +22,8 @@ import {
 import { PieChart } from '@mui/x-charts/PieChart';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
-import type { Asset, Currency } from '../types';
+import type { Asset } from '../types/index';
+import { Currency } from '../types';
 import { api } from '../services/api';
 import AssetForm from '../components/AssetForm';
 import { ArgentineDollarProvider } from '../services/prices/ArgentineDollarProvider';

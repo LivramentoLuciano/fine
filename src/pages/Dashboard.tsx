@@ -1,10 +1,9 @@
-import { Box, Paper, Typography, CircularProgress, Grid } from '@mui/material';
+import { Box, Paper, Typography, CircularProgress } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { api } from '../services/api';
-import type { Asset } from '../types';
-import type { Theme } from '@mui/material/styles';
+import type { Asset } from '../types/index';
 import { PriceServiceFactory } from '../services/prices/PriceServiceFactory';
 
 export default function Dashboard() {
@@ -80,8 +79,8 @@ export default function Dashboard() {
           const price = await PriceServiceFactory.updateAssetPrice(asset);
           return {
             ...asset,
-            currentPrice: price,
-            lastPriceUpdate: price ? new Date() : null,
+            currentPrice: price ?? null,
+            lastPriceUpdate: price ? new Date().toISOString() : null,
           };
         })
       );

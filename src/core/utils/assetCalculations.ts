@@ -1,4 +1,4 @@
-import { Asset } from '../../types';
+import type { Asset } from '../../types/index';
 
 interface AssetTotals {
   totalInvestedUSD: number;

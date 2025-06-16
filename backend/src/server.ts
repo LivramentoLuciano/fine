@@ -1,8 +1,18 @@
 import express from 'express';
 import cors from 'cors';
-import transactionRoutes from './src/routes/transactionRoutes';
-import assetRoutes from './src/routes/assetRoutes';
-import { requestLogger, errorLogger } from './src/middleware/logging';
+import { createTransactionRoutes } from './routes/transactionRoutes';
+import { createAssetRoutes } from './routes/assetRoutes';
+
+// Middleware de logging
+const requestLogger = (req: express.Request, _res: express.Response, next: express.NextFunction) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  next();
+};
+
+const errorLogger = (err: Error, _req: express.Request, _res: express.Response, next: express.NextFunction) => {
+  console.error(`[${new Date().toISOString()}] Error:`, err);
+  next(err);
+};
 
 const app = express();
 const port = 3001;
@@ -20,8 +30,8 @@ app.use(cors({
 app.use(express.json());
 
 // Rutas
-app.use('/api/transactions', transactionRoutes);
-app.use('/api/assets', assetRoutes);
+app.use('/api/transactions', createTransactionRoutes());
+app.use('/api/assets', createAssetRoutes());
 
 // Health check endpoint
 app.get('/health', (_req, res) => {
@@ -30,7 +40,7 @@ app.get('/health', (_req, res) => {
 
 // Middleware de manejo de errores
 app.use(errorLogger);
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Error:', err);
   res.status(500).json({ error: 'Internal server error' });
 });

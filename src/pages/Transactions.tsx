@@ -32,7 +32,7 @@ import { es } from 'date-fns/locale';
 import { format } from 'date-fns';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import type { Transaction, TransactionType, Currency, AssetType } from '../types';
+import type { Transaction, TransactionType, Currency, AssetType } from '../types/index';
 import { api } from '../services/api';
 
 export default function Transactions() {

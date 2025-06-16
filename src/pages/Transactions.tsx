@@ -32,13 +32,26 @@ import { es } from 'date-fns/locale';
 import { format } from 'date-fns';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import type { Transaction, TransactionType, Currency, AssetType } from '../types/index';
+import type { Transaction, TransactionType, Currency, AssetType } from '../types';
 import { api } from '../services/api';
 
+// Tipo para el formulario de transacción
+type TransactionFormData = {
+  date: Date;
+  type: TransactionType;
+  amount: number;
+  currency: Currency;
+  assetName?: string;
+  assetType?: AssetType;
+  units?: number;
+  notes?: string;
+};
+
 export default function Transactions() {
-  const [transaction, setTransaction] = useState<Partial<Transaction>>({
+  const [transaction, setTransaction] = useState<TransactionFormData>({
     date: new Date(),
     type: 'COMPRA',
+    amount: 0,
     currency: 'USD',
   });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -57,7 +70,14 @@ export default function Transactions() {
     try {
       setLoadingTransactions(true);
       const data = await api.getTransactions();
-      setTransactions(data);
+      // Convertir las fechas de string a Date
+      const transactionsWithDates = data.map((t: Transaction) => ({
+        ...t,
+        date: new Date(t.date),
+        createdAt: new Date(t.createdAt),
+        updatedAt: new Date(t.updatedAt),
+      }));
+      setTransactions(transactionsWithDates);
     } catch (error) {
       console.error('Error loading transactions:', error);
       setSnackbar({
@@ -77,8 +97,14 @@ export default function Transactions() {
   const handleEditTransaction = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setTransaction({
-      ...transaction,
-      date: new Date(transaction.date),
+      date: transaction.date,
+      type: transaction.type,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      assetName: transaction.assetName,
+      assetType: transaction.assetType,
+      units: transaction.units,
+      notes: transaction.notes,
     });
   };
 
@@ -123,13 +149,27 @@ export default function Transactions() {
       }
 
       if ((transaction.type === 'COMPRA' || transaction.type === 'VENTA') && 
-          (!transaction.assetName || !transaction.units)) {
-        throw new Error('Para compras y ventas, el nombre del activo y las unidades son requeridas');
+          (!transaction.assetName || !transaction.units || !transaction.assetType)) {
+        throw new Error('Para compras y ventas, el nombre del activo, tipo y las unidades son requeridas');
       }
+
+      const now = new Date();
+      const transactionData: Omit<Transaction, 'id'> = {
+        date: transaction.date,
+        type: transaction.type,
+        amount: transaction.amount,
+        currency: transaction.currency,
+        assetName: transaction.assetName,
+        assetType: transaction.assetType,
+        units: transaction.units,
+        notes: transaction.notes,
+        createdAt: now,
+        updatedAt: now,
+      };
 
       if (editingTransaction) {
         // Actualizar transacción existente
-        await api.updateTransaction(editingTransaction.id, transaction as Partial<Transaction>);
+        await api.updateTransaction(editingTransaction.id, transactionData);
         setSnackbar({
           open: true,
           message: 'Transacción actualizada exitosamente',
@@ -137,7 +177,7 @@ export default function Transactions() {
         });
       } else {
         // Crear nueva transacción
-        await api.createTransaction(transaction as Omit<Transaction, 'id'>);
+        await api.createTransaction(transactionData);
         setSnackbar({
           open: true,
           message: 'Transacción guardada exitosamente',
@@ -152,6 +192,7 @@ export default function Transactions() {
       setTransaction({
         date: new Date(),
         type: 'COMPRA',
+        amount: 0,
         currency: 'USD',
       });
       setEditingTransaction(null);
@@ -171,12 +212,13 @@ export default function Transactions() {
     setTransaction({
       date: new Date(),
       type: 'COMPRA',
+      amount: 0,
       currency: 'USD',
     });
     setEditingTransaction(null);
   };
 
-  const getTransactionTypeLabel = (type: string) => {
+  const getTransactionTypeLabel = (type: TransactionType) => {
     switch (type) {
       case 'COMPRA':
         return 'Compra';
@@ -253,11 +295,10 @@ export default function Transactions() {
                   value={transaction.assetType || ''}
                   label="Tipo de Activo"
                   onChange={(e) => setTransaction({ ...transaction, assetType: e.target.value as AssetType })}
-                  required
                 >
                   <MenuItem value="CRYPTO">Criptomoneda</MenuItem>
                   <MenuItem value="STOCK">Acción</MenuItem>
-                  <MenuItem value="FOREX">Divisa</MenuItem>
+                  <MenuItem value="FOREX">Forex</MenuItem>
                 </Select>
               </FormControl>
 
@@ -276,22 +317,9 @@ export default function Transactions() {
                 onChange={(e) => setTransaction({ ...transaction, units: parseFloat(e.target.value) })}
                 fullWidth
                 required
-                inputProps={{ 
-                  step: 'any',
-                  min: '0',
-                  inputMode: 'decimal'
-                }}
-                helperText="Ingrese la cantidad de unidades (admite decimales)"
               />
             </>
           )}
-
-          <TextField
-            label="Plataforma"
-            value={transaction.plataforma || ''}
-            onChange={(e) => setTransaction({ ...transaction, plataforma: e.target.value })}
-            fullWidth
-          />
 
           <TextField
             label="Notas"
@@ -302,105 +330,73 @@ export default function Transactions() {
             fullWidth
           />
 
-          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
-              disabled={loading}
-              sx={{ flex: 1 }}
-            >
-              {loading ? <CircularProgress size={24} /> : (editingTransaction ? 'Actualizar' : 'Guardar')}
-            </Button>
+          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
             {editingTransaction && (
-              <Button
-                variant="outlined"
-                size="large"
-                onClick={handleCancelEdit}
-                disabled={loading}
-              >
+              <Button onClick={handleCancelEdit} variant="outlined">
                 Cancelar
               </Button>
             )}
+            <Button type="submit" variant="contained" disabled={loading}>
+              {loading ? <CircularProgress size={24} /> : (editingTransaction ? 'Actualizar' : 'Guardar')}
+            </Button>
           </Box>
         </Box>
       </Paper>
 
-      <Typography variant="h4" gutterBottom>
-        Historial de Transacciones
-      </Typography>
-
-      {loadingTransactions ? (
-        <Box display="flex" justifyContent="center" p={4}>
-          <CircularProgress />
-        </Box>
-      ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Fecha</TableCell>
-                <TableCell>Tipo</TableCell>
-                <TableCell>Monto</TableCell>
-                <TableCell>Moneda</TableCell>
-                <TableCell>Activo</TableCell>
-                <TableCell>Unidades</TableCell>
-                <TableCell>Notas</TableCell>
-                <TableCell>Plataforma</TableCell>
-                <TableCell align="center">Acciones</TableCell>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Fecha</TableCell>
+              <TableCell>Tipo</TableCell>
+              <TableCell align="right">Monto</TableCell>
+              <TableCell>Moneda</TableCell>
+              <TableCell>Activo</TableCell>
+              <TableCell align="right">Unidades</TableCell>
+              <TableCell>Notas</TableCell>
+              <TableCell align="center">Acciones</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {transactions.map((t) => (
+              <TableRow key={t.id}>
+                <TableCell>{format(t.date, 'dd/MM/yyyy HH:mm')}</TableCell>
+                <TableCell>{getTransactionTypeLabel(t.type)}</TableCell>
+                <TableCell align="right">{t.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                <TableCell>{t.currency}</TableCell>
+                <TableCell>{t.assetName || '-'}</TableCell>
+                <TableCell align="right">{t.units?.toLocaleString('en-US', { minimumFractionDigits: 8 }) || '-'}</TableCell>
+                <TableCell>{t.notes || '-'}</TableCell>
+                <TableCell align="center">
+                  <Tooltip title="Editar">
+                    <IconButton onClick={() => handleEditTransaction(t)} size="small">
+                      <EditIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Eliminar">
+                    <IconButton onClick={() => handleDeleteClick(t)} size="small" color="error">
+                      <DeleteIcon />
+                    </IconButton>
+                  </Tooltip>
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {transactions.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell>{format(new Date(t.date), 'dd/MM/yyyy')}</TableCell>
-                  <TableCell>{getTransactionTypeLabel(t.type)}</TableCell>
-                  <TableCell>{t.amount.toFixed(2)}</TableCell>
-                  <TableCell>{t.currency}</TableCell>
-                  <TableCell>{t.assetName || '-'}</TableCell>
-                  <TableCell>{t.units?.toFixed(2) || '-'}</TableCell>
-                  <TableCell>{t.notes || '-'}</TableCell>
-                  <TableCell>{t.plataforma || '-'}</TableCell>
-                  <TableCell align="center">
-                    <Tooltip title="Editar">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEditTransaction(t)}
-                        color="primary"
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Eliminar">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteClick(t)}
-                        color="error"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {transactions.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} align="center">
-                    No hay transacciones registradas
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+            ))}
+            {transactions.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} align="center">
+                  No hay transacciones registradas
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-      {/* Diálogo de confirmación para eliminar */}
       <Dialog
         open={deleteDialogOpen}
         onClose={() => setDeleteDialogOpen(false)}
       >
-        <DialogTitle>Confirmar eliminación</DialogTitle>
+        <DialogTitle>Confirmar Eliminación</DialogTitle>
         <DialogContent>
           <DialogContentText>
             ¿Estás seguro de que deseas eliminar esta transacción? Esta acción no se puede deshacer.
@@ -408,7 +404,7 @@ export default function Transactions() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancelar</Button>
-          <Button onClick={handleDeleteConfirm} color="error" variant="contained" disabled={loading}>
+          <Button onClick={handleDeleteConfirm} color="error" disabled={loading}>
             {loading ? <CircularProgress size={24} /> : 'Eliminar'}
           </Button>
         </DialogActions>
@@ -419,9 +415,15 @@ export default function Transactions() {
         autoHideDuration={6000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
         message={snackbar.message}
-        ContentProps={{
-          sx: { bgcolor: snackbar.isError ? 'error.main' : 'success.main' }
-        }}
+        action={
+          <IconButton
+            size="small"
+            color="inherit"
+            onClick={() => setSnackbar({ ...snackbar, open: false })}
+          >
+            ✕
+          </IconButton>
+        }
       />
     </div>
   );

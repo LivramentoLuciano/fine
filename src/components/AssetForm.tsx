@@ -11,11 +11,9 @@ import {
   InputLabel,
   Select,
   FormHelperText,
-  Box,
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
-import type { Asset } from '../types/index';
-import type { Currency, AssetType } from '../types';
+import type { Asset, Currency, AssetType } from '../types';
 
 interface AssetFormProps {
   open: boolean;

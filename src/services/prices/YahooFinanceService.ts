@@ -3,7 +3,7 @@ import type { AssetType, Currency, PriceService } from '../../types';
 export class YahooFinanceService implements PriceService {
   private readonly API_BASE = 'https://query1.finance.yahoo.com/v8/finance/chart';
 
-  async getPrice(symbol: string, currency: Currency): Promise<number> {
+  async getPrice(symbol: string, _currency: Currency): Promise<number> {
     try {
       const response = await fetch(
         `${this.API_BASE}/${symbol}?interval=1d&range=1d`

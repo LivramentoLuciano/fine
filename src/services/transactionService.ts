@@ -19,12 +19,12 @@ export const transactionService = {
       });
 
       // Si es una compra o venta, actualizar el asset
-      if (data.type === 'PURCHASE' || data.type === 'SALE' && data.assetName && data.units) {
+      if ((data.type === 'COMPRA' || data.type === 'VENTA') && data.assetName && data.units && data.assetType) {
         const asset = await prisma.asset.findUnique({
           where: { name: data.assetName },
         });
 
-        if (data.type === 'PURCHASE') {
+        if (data.type === 'COMPRA') {
           if (asset) {
             // Actualizar asset existente
             const newTotalUnits = asset.totalUnits + data.units;
@@ -38,7 +38,7 @@ export const transactionService = {
               data: {
                 totalUnits: newTotalUnits,
                 averagePurchasePrice: newAveragePrice,
-                lastUpdated: new Date(),
+                updatedAt: new Date(),
               },
             });
           } else {
@@ -46,20 +46,22 @@ export const transactionService = {
             await prisma.asset.create({
               data: {
                 name: data.assetName,
+                symbol: data.assetName, // Usando el nombre como símbolo por defecto
+                type: data.assetType,
                 totalUnits: data.units,
                 averagePurchasePrice: data.amount / data.units,
                 currency: data.currency,
               },
             });
           }
-        } else if (data.type === 'SALE' && asset) {
+        } else if (data.type === 'VENTA' && asset) {
           // Actualizar units para venta
           const newTotalUnits = asset.totalUnits - data.units;
           await prisma.asset.update({
             where: { name: data.assetName },
             data: {
               totalUnits: newTotalUnits,
-              lastUpdated: new Date(),
+              updatedAt: new Date(),
             },
           });
         }

@@ -23,8 +23,8 @@ export interface Asset {
   type: AssetType;
   totalUnits: number;
   averagePurchasePrice: number;
-  currentPrice?: number;
-  lastPriceUpdate?: Date;
+  currentPrice: number | null;
+  lastPriceUpdate: string | null;
   currency: Currency;
   createdAt: Date;
   updatedAt: Date;

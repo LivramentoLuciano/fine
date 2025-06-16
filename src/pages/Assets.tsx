@@ -22,8 +22,7 @@ import {
 import { PieChart } from '@mui/x-charts/PieChart';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
-import type { Asset } from '../types/index';
-import { Currency } from '../types';
+import type { Asset, AssetType, Currency } from '../types';
 import { api } from '../services/api';
 import AssetForm from '../components/AssetForm';
 import { ArgentineDollarProvider } from '../services/prices/ArgentineDollarProvider';
@@ -110,7 +109,12 @@ export default function Assets() {
   const handleSubmitAsset = async (assetData: Partial<Asset>) => {
     try {
       if (selectedAsset) {
-        await api.updateAsset(selectedAsset.id, assetData);
+        // Aseguramos que los campos requeridos estén presentes
+        const updateData = {
+          symbol: assetData.symbol || selectedAsset.symbol,
+          type: (assetData.type || selectedAsset.type) as AssetType,
+        };
+        await api.updateAsset(selectedAsset.id, updateData);
         handleRefresh();
       }
     } catch (error) {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Asset } from '../../types/index';
+import type { Asset } from '../../types';
 import { api } from '../../services/api';
 import { PriceServiceFactory } from '../../services/prices/PriceServiceFactory';
 
@@ -17,8 +17,8 @@ export const useAssets = () => {
           const price = await PriceServiceFactory.updateAssetPrice(asset);
           return {
             ...asset,
-            currentPrice: price ?? null,
-            lastPriceUpdate: price ? new Date().toISOString() : null,
+            currentPrice: price !== null ? price : null,
+            lastPriceUpdate: price !== null ? new Date().toISOString() : null,
           };
         })
       );

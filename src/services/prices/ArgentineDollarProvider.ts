@@ -1,3 +1,5 @@
+import type { PriceService, AssetType, Currency } from '../../types';
+
 interface DolarAPIResponse {
   casa: string;
   nombre: string;
@@ -10,10 +12,14 @@ interface DolarAPIResponse {
   decimales: number;
 }
 
-export class ArgentineDollarProvider {
+export class ArgentineDollarProvider implements PriceService {
   private baseUrl = 'https://dolarapi.com/v1/dolares';
 
-  async getPrice(symbol: string): Promise<number> {
+  async getPrice(_symbol: string, currency: Currency): Promise<number> {
+    if (currency !== 'ARS') {
+      throw new Error('ArgentineDollarProvider solo soporta conversiones a ARS');
+    }
+
     try {
       // Obtener todas las cotizaciones
       const response = await fetch(this.baseUrl);
@@ -45,5 +51,10 @@ export class ArgentineDollarProvider {
       console.error('Error fetching Argentine dollar rate:', error);
       throw new Error('Failed to fetch Argentine dollar rate');
     }
+  }
+
+  supports(assetType: AssetType): boolean {
+    // Este proveedor solo maneja la conversión de USD a ARS
+    return true; // Podría ser más específico si se necesita
   }
 } 

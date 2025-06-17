@@ -1,6 +1,9 @@
 import type { Transaction, Asset } from '../types';
 
-const API_URL = 'http://localhost:3000/api';
+// Usar la URL de Railway en producción, localhost en desarrollo
+const API_URL = import.meta.env.PROD 
+  ? 'https://fine-production.up.railway.app/api'
+  : 'http://localhost:3000/api';
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {
@@ -113,7 +116,7 @@ export const api = {
 
   async checkHealth() {
     try {
-      const response = await fetch(`${API_URL.replace('/api', '')}/health`);
+      const response = await fetch(`${API_URL}/health`);
       return await handleResponse(response);
     } catch (error) {
       console.error('Health check error:', error);

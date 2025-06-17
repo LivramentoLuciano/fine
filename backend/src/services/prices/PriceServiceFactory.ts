@@ -1,4 +1,4 @@
-import type { Asset, AssetType } from '../../../types';
+import type { Asset, AssetType } from '../../types/index';
 import type { PriceService } from './PriceService';
 
 export class PriceServiceFactory {
@@ -13,10 +13,6 @@ export class PriceServiceFactory {
   }
 
   static async updateAssetPrice(asset: Asset): Promise<number | null> {
-    if (asset.type === 'MANUAL') {
-      return asset.manualPrice;
-    }
-
     const service = this.getService(asset.type);
     if (!service || !asset.symbol) {
       return null;

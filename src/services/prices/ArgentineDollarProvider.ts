@@ -15,9 +15,10 @@ interface DolarAPIResponse {
 export class ArgentineDollarProvider implements PriceService {
   private baseUrl = 'https://dolarapi.com/v1/dolares';
 
-  async getPrice(_symbol: string, currency: Currency): Promise<number> {
-    if (currency !== 'ARS') {
-      throw new Error('ArgentineDollarProvider solo soporta conversiones a ARS');
+  async getPrice(symbol: string, currency: Currency): Promise<number> {
+    // Este proveedor solo maneja la conversión de USD a ARS
+    if (symbol !== 'USD' || currency !== 'ARS') {
+      throw new Error('ArgentineDollarProvider solo soporta conversiones de USD a ARS');
     }
 
     try {
@@ -53,8 +54,9 @@ export class ArgentineDollarProvider implements PriceService {
     }
   }
 
-  supports(assetType: AssetType): boolean {
+  supports(_assetType: AssetType): boolean {
     // Este proveedor solo maneja la conversión de USD a ARS
-    return true; // Podría ser más específico si se necesita
+    // No es específico para ningún tipo de asset, sino para conversión de monedas
+    return false; // No soporta ningún tipo de asset específico
   }
 } 

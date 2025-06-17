@@ -1,7 +1,17 @@
-import { PrismaClient, Transaction as PrismaTransaction } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import type { Transaction } from '../types/index';
 
 const prisma = new PrismaClient();
+
+// Función para convertir de PrismaTransaction a Transaction
+function convertPrismaTransactionToTransaction(prismaTransaction: any): Transaction {
+  return {
+    ...prismaTransaction,
+    date: new Date(prismaTransaction.date),
+    createdAt: new Date(prismaTransaction.createdAt),
+    updatedAt: new Date(prismaTransaction.updatedAt),
+  };
+}
 
 export class TransactionService {
   async createTransaction(data: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>): Promise<Transaction> {
@@ -13,10 +23,8 @@ export class TransactionService {
         currency: data.currency,
         units: data.units || null,
         assetName: data.assetName || null,
-        assetType: data.assetType || null,
         notes: data.notes || null,
-        plataforma: data.plataforma || null,
-      } as PrismaTransaction,
+      },
     });
 
     // Si es una compra o venta, actualizar el asset
@@ -24,7 +32,7 @@ export class TransactionService {
       await this.updateAssetAfterTransaction(data);
     }
 
-    return transaction;
+    return convertPrismaTransactionToTransaction(transaction);
   }
 
   private async updateAssetAfterTransaction(data: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) {
@@ -46,7 +54,7 @@ export class TransactionService {
           data: {
             totalUnits: newTotalUnits,
             averagePurchasePrice: newAveragePrice,
-            lastPriceUpdate: new Date(),
+            updatedAt: new Date(),
           },
         });
       } else {
@@ -55,7 +63,7 @@ export class TransactionService {
           data: {
             name: data.assetName!,
             symbol: data.assetName!, // Por ahora usamos el nombre como símbolo
-            type: data.assetType || 'CRYPTO', // Usar el tipo proporcionado o CRYPTO por defecto
+            type: 'CRYPTO', // Valor por defecto
             totalUnits: data.units!,
             averagePurchasePrice: data.amount / data.units!,
             currency: data.currency,
@@ -72,22 +80,24 @@ export class TransactionService {
         where: { name: data.assetName },
         data: {
           totalUnits: newTotalUnits,
-          lastPriceUpdate: new Date(),
+          updatedAt: new Date(),
         },
       });
     }
   }
 
   async getAllTransactions(): Promise<Transaction[]> {
-    return prisma.transaction.findMany({
+    const transactions = await prisma.transaction.findMany({
       orderBy: { date: 'desc' },
     });
+    return transactions.map(convertPrismaTransactionToTransaction);
   }
 
   async getTransactionById(id: string): Promise<Transaction | null> {
-    return prisma.transaction.findUnique({
+    const transaction = await prisma.transaction.findUnique({
       where: { id },
     });
+    return transaction ? convertPrismaTransactionToTransaction(transaction) : null;
   }
 
   async updateTransaction(id: string, data: Partial<Transaction>): Promise<Transaction> {
@@ -99,14 +109,15 @@ export class TransactionService {
       throw new Error('Transacción no encontrada');
     }
 
-    return prisma.transaction.update({
+    const updatedTransaction = await prisma.transaction.update({
       where: { id },
       data: {
         ...data,
         date: data.date ? new Date(data.date) : undefined,
-        plataforma: data.plataforma ?? undefined,
-      } as Partial<PrismaTransaction>,
+      },
     });
+
+    return convertPrismaTransactionToTransaction(updatedTransaction);
   }
 
   async deleteTransaction(id: string): Promise<void> {
@@ -141,7 +152,7 @@ export class TransactionService {
                 where: { name: transaction.assetName },
                 data: {
                   totalUnits: newTotalUnits,
-                  lastPriceUpdate: new Date(),
+                  updatedAt: new Date(),
                 },
               });
             }
@@ -151,7 +162,7 @@ export class TransactionService {
               where: { name: transaction.assetName },
               data: {
                 totalUnits: newTotalUnits,
-                lastPriceUpdate: new Date(),
+                updatedAt: new Date(),
               },
             });
           }

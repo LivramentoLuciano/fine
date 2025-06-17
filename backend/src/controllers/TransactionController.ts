@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { TransactionService } from '../services/TransactionService';
-import type { Transaction } from '../types';
+import type { Transaction } from '../types/index';
 
 const transactionService = new TransactionService();
 
@@ -30,22 +30,22 @@ export class TransactionController {
     }
   }
 
-  async getTransactionById(req: Request, res: Response) {
+  async getTransactionById(_req: Request, res: Response) {
     try {
-      const { id } = req.params;
+      const { id } = _req.params;
       const transaction = await transactionService.getTransactionById(id);
 
       if (!transaction) {
         return res.status(404).json({ error: 'Transacción no encontrada' });
       }
 
-      res.json(transaction);
+      return res.json(transaction);
     } catch (error) {
       console.error('Error fetching transaction:', error);
       if (error instanceof Error) {
-        res.status(400).json({ error: error.message });
+        return res.status(400).json({ error: error.message });
       } else {
-        res.status(500).json({ error: 'Error fetching transaction' });
+        return res.status(500).json({ error: 'Error fetching transaction' });
       }
     }
   }

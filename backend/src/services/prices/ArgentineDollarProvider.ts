@@ -15,9 +15,13 @@ interface DolarAPIResponse {
 
 export class ArgentineDollarProvider implements PriceProvider {
   private baseUrl = 'https://dolarapi.com/v1/dolares';
-  private preferredTypes = ['blue', 'mep', 'oficial'];
 
   async getPrice(symbol: string): Promise<number> {
+    // Este proveedor solo maneja la conversión de USD a ARS
+    if (symbol !== 'USD') {
+      throw new Error('ArgentineDollarProvider solo soporta conversiones de USD a ARS');
+    }
+
     try {
       // Obtener todas las cotizaciones
       const response = await axios.get<DolarAPIResponse[]>(this.baseUrl);

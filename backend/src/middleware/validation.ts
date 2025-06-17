@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import type { TransactionType, AssetType, Currency } from '../types';
 
 // Esquemas de validación
 const transactionSchema = z.object({

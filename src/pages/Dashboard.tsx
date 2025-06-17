@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { api } from '../services/api';
-import type { Asset } from '../types/index';
+import type { Asset } from '../types';
 import { PriceServiceFactory } from '../services/prices/PriceServiceFactory';
 
 export default function Dashboard() {
@@ -76,12 +76,17 @@ export default function Dashboard() {
     try {
       const updatedAssets = await Promise.all(
         assets.map(async (asset) => {
-          const price = await PriceServiceFactory.updateAssetPrice(asset);
-          return {
-            ...asset,
-            currentPrice: price ?? null,
-            lastPriceUpdate: price ? new Date().toISOString() : null,
-          };
+          try {
+            const price = await PriceServiceFactory.updateAssetPrice(asset);
+            return {
+              ...asset,
+              currentPrice: price ?? null,
+              lastPriceUpdate: price ? new Date().toISOString() : null,
+            };
+          } catch (error) {
+            console.error(`Error updating price for ${asset.name}:`, error);
+            return asset;
+          }
         })
       );
       setAssets(updatedAssets);

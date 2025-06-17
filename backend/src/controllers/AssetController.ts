@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { AssetService } from '../services/AssetService';
-import type { Asset } from '../types';
+import type { Asset } from '../types/index';
 
 const assetService = new AssetService();
 
@@ -24,10 +24,10 @@ export class AssetController {
         return res.status(404).json({ error: 'Asset not found' });
       }
 
-      res.json(asset);
+      return res.json(asset);
     } catch (error) {
       console.error('Error fetching asset:', error);
-      res.status(500).json({ error: 'Error fetching asset' });
+      return res.status(500).json({ error: 'Error fetching asset' });
     }
   }
 
@@ -69,23 +69,16 @@ export class AssetController {
     try {
       const { id } = req.params;
       const { currentPrice } = req.body;
+      
+      if (typeof currentPrice !== 'number' || currentPrice < 0) {
+        return res.status(400).json({ error: 'Invalid price value' });
+      }
+      
       const asset = await assetService.updateAssetPrice(id, currentPrice);
-      res.json(asset);
+      return res.json(asset);
     } catch (error) {
       console.error('Error updating asset price:', error);
-      res.status(500).json({ error: 'Error updating asset price' });
-    }
-  }
-
-  async updateManualPrice(req: Request, res: Response) {
-    try {
-      const { id } = req.params;
-      const { manualPrice } = req.body;
-      const asset = await assetService.updateManualPrice(id, manualPrice);
-      res.json(asset);
-    } catch (error) {
-      console.error('Error updating manual price:', error);
-      res.status(500).json({ error: 'Error updating manual price' });
+      return res.status(500).json({ error: 'Error updating asset price' });
     }
   }
 } 

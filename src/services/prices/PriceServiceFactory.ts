@@ -9,12 +9,19 @@ export class PriceServiceFactory {
   ];
 
   static async updateAssetPrice(asset: Asset): Promise<number | null> {
+    if (!asset.symbol) {
+      console.warn(`Asset ${asset.name} no tiene símbolo definido`);
+      return null;
+    }
+
     // Intentar obtener el precio de cada servicio hasta que uno funcione
     for (const service of this.services) {
       try {
-        const price = await service.getPrice(asset.symbol, asset.currency);
-        if (price !== null) {
-          return price;
+        if (service.supports(asset.type)) {
+          const price = await service.getPrice(asset.symbol, asset.currency);
+          if (price !== null) {
+            return price;
+          }
         }
       } catch (error) {
         console.error(`Error getting price from ${service.constructor.name} for ${asset.symbol}:`, error);

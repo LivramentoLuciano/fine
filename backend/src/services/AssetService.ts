@@ -1,40 +1,46 @@
 import { PrismaClient } from '@prisma/client';
 import type { Asset } from '../types';
-import { PriceService } from './PriceService';
+import { convertPrismaAssetToAsset } from '../types';
+import { PriceServiceFactory } from './prices/PriceServiceFactory';
 
 const prisma = new PrismaClient();
-const priceService = new PriceService();
 
 export class AssetService {
   async getAllAssets(): Promise<Asset[]> {
-    const assets = await prisma.asset.findMany({
+    const prismaAssets = await prisma.asset.findMany({
       orderBy: { name: 'asc' },
     });
 
     // Actualizar precios automáticamente
-    const prices = await priceService.updateAllAssetPrices(
-      assets.map(asset => ({ id: asset.id, symbol: asset.symbol }))
+    const updatedAssets = await Promise.all(
+      prismaAssets.map(async (prismaAsset) => {
+        try {
+          const asset = convertPrismaAssetToAsset(prismaAsset);
+          const price = await PriceServiceFactory.updateAssetPrice(asset);
+          if (price !== null) {
+            const updatedPrismaAsset = await this.updateAssetPrice(prismaAsset.id, price);
+            return convertPrismaAssetToAsset(updatedPrismaAsset);
+          }
+          return asset;
+        } catch (error) {
+          console.error(`Error updating price for asset ${prismaAsset.id}:`, error);
+          return convertPrismaAssetToAsset(prismaAsset);
+        }
+      })
     );
 
-    // Actualizar los precios en la base de datos
-    for (const [assetId, price] of prices.entries()) {
-      await this.updateAssetPrice(assetId, price);
-    }
-
-    // Devolver los activos con los precios actualizados
-    return prisma.asset.findMany({
-      orderBy: { name: 'asc' },
-    });
+    return updatedAssets;
   }
 
   async getAssetById(id: string): Promise<Asset | null> {
-    return prisma.asset.findUnique({
+    const prismaAsset = await prisma.asset.findUnique({
       where: { id },
     });
+    return prismaAsset ? convertPrismaAssetToAsset(prismaAsset) : null;
   }
 
   async createAsset(data: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'>): Promise<Asset> {
-    return prisma.asset.create({
+    const prismaAsset = await prisma.asset.create({
       data: {
         name: data.name,
         symbol: data.symbol,
@@ -44,21 +50,24 @@ export class AssetService {
         currentPrice: data.currentPrice,
         lastPriceUpdate: data.lastPriceUpdate ? new Date(data.lastPriceUpdate) : null,
         currency: data.currency,
-        manualPrice: data.manualPrice,
-        manualPriceDate: data.manualPriceDate ? new Date(data.manualPriceDate) : null,
       },
     });
+    return convertPrismaAssetToAsset(prismaAsset);
   }
 
   async updateAsset(id: string, data: Partial<Asset>): Promise<Asset> {
-    return prisma.asset.update({
+    const updateData: any = { ...data };
+    
+    // Manejar campos de fecha
+    if (data.lastPriceUpdate) {
+      updateData.lastPriceUpdate = new Date(data.lastPriceUpdate);
+    }
+
+    const prismaAsset = await prisma.asset.update({
       where: { id },
-      data: {
-        ...data,
-        lastPriceUpdate: data.lastPriceUpdate ? new Date(data.lastPriceUpdate) : undefined,
-        manualPriceDate: data.manualPriceDate ? new Date(data.manualPriceDate) : undefined,
-      },
+      data: updateData,
     });
+    return convertPrismaAssetToAsset(prismaAsset);
   }
 
   async deleteAsset(id: string): Promise<void> {
@@ -68,22 +77,13 @@ export class AssetService {
   }
 
   async updateAssetPrice(id: string, currentPrice: number): Promise<Asset> {
-    return prisma.asset.update({
+    const prismaAsset = await prisma.asset.update({
       where: { id },
       data: {
         currentPrice,
         lastPriceUpdate: new Date(),
       },
     });
-  }
-
-  async updateManualPrice(id: string, manualPrice: number): Promise<Asset> {
-    return prisma.asset.update({
-      where: { id },
-      data: {
-        manualPrice,
-        manualPriceDate: new Date(),
-      },
-    });
+    return convertPrismaAssetToAsset(prismaAsset);
   }
 } 

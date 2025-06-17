@@ -1,6 +1,6 @@
 import axios from 'axios';
 import type { Asset } from '../../types';
-import type { AssetType, Currency } from '../../../types';
+import type { AssetType, Currency } from '../../types';
 import { ArgentineDollarProvider } from './ArgentineDollarProvider';
 
 export interface PriceProvider {
@@ -122,4 +122,9 @@ export class PriceService {
     // Implementation needed
     throw new Error('Method not implemented');
   }
+}
+
+export interface PriceService {
+  getPrice(symbol: string, currency: Currency): Promise<number>;
+  supports(assetType: AssetType): boolean;
 } 

@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { PriceService } from './PriceService';
-import { Asset } from '../../types';
+import { convertPrismaAssetToAsset } from '../../types';
 
 const prisma = new PrismaClient();
 
@@ -32,14 +32,11 @@ export class PriceUpdateService {
 
   private async updateAllPrices() {
     try {
-      // Obtener todos los assets que no son manuales
-      const assets = await prisma.asset.findMany({
-        where: {
-          type: {
-            not: 'MANUAL',
-          },
-        },
-      });
+      // Obtener todos los assets
+      const prismaAssets = await prisma.asset.findMany();
+
+      // Convertir a tipo Asset
+      const assets = prismaAssets.map(convertPrismaAssetToAsset);
 
       // Obtener precios actualizados
       const prices = await this.priceService.updateAssetPrices(assets);

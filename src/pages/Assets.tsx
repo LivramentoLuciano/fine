@@ -59,7 +59,7 @@ export default function Assets() {
   const fetchUsdRate = async () => {
     try {
       const provider = new ArgentineDollarProvider();
-      const rate = await provider.getPrice('USD');
+      const rate = await provider.getPrice('USD', 'ARS');
       setUsdRate(rate);
     } catch (error) {
       console.error('Error fetching USD rate:', error);

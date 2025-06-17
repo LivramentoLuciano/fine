@@ -24,8 +24,5 @@ export const createAssetRoutes = () => {
   // PUT /api/assets/:id/price
   router.put('/:id/price', validateAsset, assetController.updateAssetPrice);
 
-  // PUT /api/assets/:id/manual-price
-  router.put('/:id/manual-price', validateAsset, assetController.updateManualPrice);
-
   return router;
 }; 

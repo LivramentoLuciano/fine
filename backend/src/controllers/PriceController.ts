@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PriceService } from '../services/prices/PriceService';
 import { PriceUpdateService } from '../services/prices/PriceUpdateService';
+import { AssetService } from '../services/AssetService';
 import { z } from 'zod';
 
 const priceUpdateSchema = z.object({
@@ -10,20 +11,29 @@ const priceUpdateSchema = z.object({
 export class PriceController {
   private priceService: PriceService;
   private priceUpdateService: PriceUpdateService;
+  private assetService: AssetService;
 
   constructor(exchangeRatesApiKey: string) {
     this.priceService = new PriceService(exchangeRatesApiKey);
     this.priceUpdateService = new PriceUpdateService(exchangeRatesApiKey);
+    this.assetService = new AssetService();
   }
 
   async getCurrentPrice(req: Request, res: Response) {
     try {
       const { assetId } = req.params;
-      const price = await this.priceService.getCurrentPrice(assetId);
-      res.json({ price });
+      
+      // Obtener el asset primero
+      const asset = await this.assetService.getAssetById(assetId);
+      if (!asset) {
+        return res.status(404).json({ error: 'Asset not found' });
+      }
+
+      const price = await this.priceService.getCurrentPrice(asset);
+      return res.json({ price });
     } catch (error) {
       console.error('Error getting current price:', error);
-      res.status(500).json({ error: 'Error getting current price' });
+      return res.status(500).json({ error: 'Error getting current price' });
     }
   }
 
@@ -42,7 +52,7 @@ export class PriceController {
     }
   }
 
-  async stopPeriodicUpdates(req: Request, res: Response) {
+  async stopPeriodicUpdates(_req: Request, res: Response) {
     try {
       this.priceUpdateService.stopPeriodicUpdates();
       res.json({ message: 'Periodic price updates stopped' });

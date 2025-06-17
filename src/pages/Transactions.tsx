@@ -70,14 +70,8 @@ export default function Transactions() {
     try {
       setLoadingTransactions(true);
       const data = await api.getTransactions();
-      // Convertir las fechas de string a Date
-      const transactionsWithDates = data.map((t: Transaction) => ({
-        ...t,
-        date: new Date(t.date),
-        createdAt: new Date(t.createdAt),
-        updatedAt: new Date(t.updatedAt),
-      }));
-      setTransactions(transactionsWithDates);
+      // Los datos ya vienen con fechas convertidas desde el backend
+      setTransactions(data);
     } catch (error) {
       console.error('Error loading transactions:', error);
       setSnackbar({
@@ -358,35 +352,42 @@ export default function Transactions() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {transactions.map((t) => (
-              <TableRow key={t.id}>
-                <TableCell>{format(t.date, 'dd/MM/yyyy HH:mm')}</TableCell>
-                <TableCell>{getTransactionTypeLabel(t.type)}</TableCell>
-                <TableCell align="right">{t.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
-                <TableCell>{t.currency}</TableCell>
-                <TableCell>{t.assetName || '-'}</TableCell>
-                <TableCell align="right">{t.units?.toLocaleString('en-US', { minimumFractionDigits: 8 }) || '-'}</TableCell>
-                <TableCell>{t.notes || '-'}</TableCell>
-                <TableCell align="center">
-                  <Tooltip title="Editar">
-                    <IconButton onClick={() => handleEditTransaction(t)} size="small">
-                      <EditIcon />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Eliminar">
-                    <IconButton onClick={() => handleDeleteClick(t)} size="small" color="error">
-                      <DeleteIcon />
-                    </IconButton>
-                  </Tooltip>
+            {loadingTransactions ? (
+              <TableRow>
+                <TableCell colSpan={8} align="center">
+                  <CircularProgress size={24} />
                 </TableCell>
               </TableRow>
-            ))}
-            {transactions.length === 0 && (
+            ) : transactions.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} align="center">
                   No hay transacciones registradas
                 </TableCell>
               </TableRow>
+            ) : (
+              transactions.map((t) => (
+                <TableRow key={t.id}>
+                  <TableCell>{format(t.date, 'dd/MM/yyyy HH:mm')}</TableCell>
+                  <TableCell>{getTransactionTypeLabel(t.type)}</TableCell>
+                  <TableCell align="right">{t.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                  <TableCell>{t.currency}</TableCell>
+                  <TableCell>{t.assetName || '-'}</TableCell>
+                  <TableCell align="right">{t.units?.toLocaleString('en-US', { minimumFractionDigits: 8 }) || '-'}</TableCell>
+                  <TableCell>{t.notes || '-'}</TableCell>
+                  <TableCell align="center">
+                    <Tooltip title="Editar">
+                      <IconButton onClick={() => handleEditTransaction(t)} size="small">
+                        <EditIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Eliminar">
+                      <IconButton onClick={() => handleDeleteClick(t)} size="small" color="error">
+                        <DeleteIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              ))
             )}
           </TableBody>
         </Table>

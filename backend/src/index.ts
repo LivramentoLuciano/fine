@@ -22,7 +22,7 @@ app.use(express.json());
 app.use(requestLogger);
 
 // Ruta de prueba
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 

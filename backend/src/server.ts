@@ -22,9 +22,14 @@ app.use(requestLogger);
 
 // Configuración de CORS
 app.use(cors({
-  origin: 'http://localhost:5173', // URL del frontend de Vite
+  origin: [
+    'http://localhost:5173', // Desarrollo local
+    'https://fine-production.up.railway.app', // Producción Railway
+    'https://fine-production.up.railway.app:443' // Puerto HTTPS
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type'],
+  credentials: true
 }));
 
 app.use(express.json());

@@ -50,7 +50,11 @@ class ExchangeRatesProvider implements PriceProvider {
 
   async getPrice(symbol: string): Promise<number> {
     try {
-      const response = await axios.get(`${this.baseUrl}/USD`);
+      const response = await axios.get(`${this.baseUrl}/USD`, {
+        params: {
+          apikey: this.apiKey
+        }
+      });
       return response.data.rates[symbol];
     } catch (error) {
       console.error(`Error fetching exchange rate for ${symbol}:`, error);
@@ -113,12 +117,12 @@ export class PriceService {
     return prices;
   }
 
-  getPrice(symbol: string, currency: Currency): Promise<number> {
+  getPrice(_symbol: string, _currency: Currency): Promise<number> {
     // Implementation needed
     throw new Error('Method not implemented');
   }
 
-  supports(assetType: AssetType): boolean {
+  supports(_assetType: AssetType): boolean {
     // Implementation needed
     throw new Error('Method not implemented');
   }

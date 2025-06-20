@@ -34,6 +34,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import type { Transaction, TransactionType, Currency, AssetType } from '../types';
 import { api } from '../services/api';
+import Autocomplete from '@mui/material/Autocomplete';
 
 // Tipo para el formulario de transacción
 type TransactionFormData = {
@@ -46,6 +47,9 @@ type TransactionFormData = {
   units?: number;
   notes?: string;
 };
+
+// Helper para comparar asset type de forma robusta
+const isCryptoType = (type: string | undefined) => (type || '').toUpperCase() === 'CRYPTO';
 
 export default function Transactions() {
   const [transaction, setTransaction] = useState<TransactionFormData>({
@@ -65,6 +69,9 @@ export default function Transactions() {
     message: '',
     isError: false,
   });
+  const [cryptoList, setCryptoList] = useState<{ id: string; symbol: string; name: string }[]>([]);
+  const [cryptoLoading, setCryptoLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const loadTransactions = async () => {
     try {
@@ -87,6 +94,18 @@ export default function Transactions() {
   useEffect(() => {
     loadTransactions();
   }, []);
+
+  // Descargar lista de criptos de CoinGecko si es necesario
+  useEffect(() => {
+    if (isCryptoType(transaction.assetType) && cryptoList.length === 0) {
+      setCryptoLoading(true);
+      fetch('https://api.coingecko.com/api/v3/coins/list')
+        .then(res => res.json())
+        .then(data => setCryptoList(data))
+        .catch(() => setCryptoList([]))
+        .finally(() => setCryptoLoading(false));
+    }
+  }, [transaction.assetType]);
 
   const handleEditTransaction = (transaction: Transaction) => {
     setEditingTransaction(transaction);
@@ -134,7 +153,7 @@ export default function Transactions() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setFormError(null);
     try {
       setLoading(true);
       // Validaciones básicas
@@ -145,6 +164,15 @@ export default function Transactions() {
       if ((transaction.type === 'COMPRA' || transaction.type === 'VENTA') && 
           (!transaction.assetName || !transaction.units || !transaction.assetType)) {
         throw new Error('Para compras y ventas, el nombre del activo, tipo y las unidades son requeridas');
+      }
+
+      // Validación de cripto
+      if (isCryptoType(transaction.assetType)) {
+        if (!transaction.assetName || !cryptoList.some(c => c.id === transaction.assetName)) {
+          setFormError('Debes seleccionar una criptomoneda válida de la lista.');
+          setLoading(false);
+          return;
+        }
       }
 
       const now = new Date();
@@ -282,27 +310,80 @@ export default function Transactions() {
 
           {(transaction.type === 'COMPRA' || transaction.type === 'VENTA') && (
             <>
-              <FormControl fullWidth>
-                <InputLabel id="asset-type-label">Tipo de Activo</InputLabel>
+              <FormControl fullWidth margin="dense">
+                <InputLabel>Tipo de Activo</InputLabel>
                 <Select
-                  labelId="asset-type-label"
                   value={transaction.assetType || ''}
                   label="Tipo de Activo"
-                  onChange={(e) => setTransaction({ ...transaction, assetType: e.target.value as AssetType })}
+                  onChange={e => setTransaction(prev => ({ ...prev, assetType: (e.target.value as string).toUpperCase() as AssetType, assetName: '' }))}
                 >
                   <MenuItem value="CRYPTO">Criptomoneda</MenuItem>
                   <MenuItem value="STOCK">Acción</MenuItem>
-                  <MenuItem value="FOREX">Forex</MenuItem>
+                  <MenuItem value="FOREX">Divisa</MenuItem>
                 </Select>
               </FormControl>
 
-              <TextField
-                label="Nombre del Activo"
-                value={transaction.assetName || ''}
-                onChange={(e) => setTransaction({ ...transaction, assetName: e.target.value })}
-                fullWidth
-                required
-              />
+              {/* Autocompletado solo para CRYPTO */}
+              {isCryptoType(transaction.assetType) ? (
+                <Autocomplete
+                  options={cryptoList}
+                  loading={cryptoLoading}
+                  filterOptions={(options, { inputValue }) => {
+                    const input = inputValue.trim().toLowerCase();
+                    if (input.length < 2) return [];
+                    const exactSymbol = options.find(option => option.symbol.toLowerCase() === input);
+                    let filtered = options.filter(option =>
+                      option.name.toLowerCase().startsWith(input) ||
+                      option.symbol.toLowerCase().startsWith(input)
+                    );
+                    if (exactSymbol) {
+                      filtered = [exactSymbol, ...filtered.filter(o => o.id !== exactSymbol.id)];
+                    }
+                    return filtered.slice(0, 20);
+                  }}
+                  getOptionLabel={option => `${option.name} (${option.symbol.toUpperCase()})`}
+                  value={cryptoList.find(c => c.id === transaction.assetName) || null}
+                  onChange={(_e, value) => {
+                    setTransaction(prev => ({ ...prev, assetName: value ? value.id : '' }));
+                    if (formError) setFormError(null);
+                  }}
+                  renderInput={params => (
+                    <TextField
+                      {...params}
+                      label="Criptomoneda"
+                      margin="dense"
+                      required
+                      error={!!formError}
+                      helperText={
+                        formError
+                          ? formError
+                          : typeof params.inputProps.value === 'string' && params.inputProps.value.length < 2
+                            ? 'Escribe al menos 2 letras para buscar.'
+                            : 'Busca y selecciona la criptomoneda. El símbolo se autocompleta.'
+                      }
+                      InputProps={{
+                        ...params.InputProps,
+                        endAdornment: (
+                          <>
+                            {cryptoLoading ? <CircularProgress color="inherit" size={20} /> : null}
+                            {params.InputProps.endAdornment}
+                          </>
+                        ),
+                      }}
+                    />
+                  )}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                />
+              ) : (
+                <TextField
+                  margin="dense"
+                  label="Nombre del Activo"
+                  fullWidth
+                  required
+                  value={transaction.assetName || ''}
+                  onChange={e => setTransaction(prev => ({ ...prev, assetName: e.target.value }))}
+                />
+              )}
 
               <TextField
                 label="Unidades"

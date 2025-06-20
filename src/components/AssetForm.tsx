@@ -14,6 +14,8 @@ import {
 } from '@mui/material';
 import type { SelectChangeEvent } from '@mui/material';
 import type { Asset, Currency, AssetType } from '../types';
+import Autocomplete from '@mui/material/Autocomplete';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface AssetFormProps {
   open: boolean;
@@ -33,10 +35,15 @@ const ASSET_TYPES: { value: AssetType; label: string }[] = [
   { value: 'FOREX', label: 'Divisa' },
 ];
 
+// Helper para comparar asset type de forma robusta
+const isCryptoType = (type: string | undefined) => (type || '').toUpperCase() === 'CRYPTO';
+
 export default function AssetForm({ open, onClose, onSubmit, initialData }: AssetFormProps) {
   const [formData, setFormData] = useState<Partial<Asset>>(initialData || {});
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof Asset, string>>>({});
+  const [cryptoList, setCryptoList] = useState<{ id: string; symbol: string; name: string }[]>([]);
+  const [cryptoLoading, setCryptoLoading] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -44,16 +51,35 @@ export default function AssetForm({ open, onClose, onSubmit, initialData }: Asse
     }
   }, [initialData]);
 
+  // Descargar lista de criptos de CoinGecko si es necesario
+  useEffect(() => {
+    if (isCryptoType(formData.type) && cryptoList.length === 0 && open) {
+      setCryptoLoading(true);
+      fetch('https://api.coingecko.com/api/v3/coins/list')
+        .then(res => res.json())
+        .then(data => setCryptoList(data))
+        .catch(() => setCryptoList([]))
+        .finally(() => setCryptoLoading(false));
+    }
+  }, [formData.type, open]);
+
   // Validar el formulario
   const validateForm = () => {
     const newErrors: Partial<Record<keyof Asset, string>> = {};
 
-    if (!formData.symbol?.trim()) {
-      newErrors.symbol = 'El símbolo es requerido';
-    }
-
     if (!formData.type) {
       newErrors.type = 'El tipo de activo es requerido';
+    }
+
+    if (isCryptoType(formData.type)) {
+      // Para cripto, symbol debe ser un id válido de CoinGecko
+      if (!formData.symbol || !cryptoList.some(c => c.id === formData.symbol)) {
+        newErrors.symbol = 'Debes seleccionar una criptomoneda válida de la lista.';
+      }
+    } else {
+      if (!formData.symbol?.trim()) {
+        newErrors.symbol = 'El símbolo es requerido';
+      }
     }
 
     setErrors(newErrors);
@@ -111,7 +137,7 @@ export default function AssetForm({ open, onClose, onSubmit, initialData }: Asse
               value={formData.type || ''}
               label="Tipo de Activo"
               onChange={(e: SelectChangeEvent) => {
-                setFormData(prev => ({ ...prev, type: e.target.value as AssetType }));
+                setFormData(prev => ({ ...prev, type: (e.target.value as string).toUpperCase() as AssetType, symbol: '' }));
                 if (errors.type) {
                   setErrors(prev => ({ ...prev, type: undefined }));
                 }
@@ -127,16 +153,72 @@ export default function AssetForm({ open, onClose, onSubmit, initialData }: Asse
             {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
           </FormControl>
 
-          <TextField
-            margin="dense"
-            label="Símbolo"
-            fullWidth
-            required
-            value={formData.symbol}
-            onChange={handleTextChange('symbol')}
-            error={!!errors.symbol}
-            helperText={errors.symbol || "Ej: BTC para Bitcoin, AAPL para Apple"}
-          />
+          {/* Autocompletado solo para CRYPTO */}
+          {isCryptoType(formData.type) ? (
+            <Autocomplete
+              options={cryptoList}
+              loading={cryptoLoading}
+              filterOptions={(options, { inputValue }) => {
+                const input = inputValue.trim().toLowerCase();
+                if (input.length < 2) return [];
+                // Priorizar coincidencia exacta de símbolo
+                const exactSymbol = options.find(option => option.symbol.toLowerCase() === input);
+                let filtered = options.filter(option =>
+                  option.name.toLowerCase().startsWith(input) ||
+                  option.symbol.toLowerCase().startsWith(input)
+                );
+                if (exactSymbol) {
+                  filtered = [exactSymbol, ...filtered.filter(o => o.id !== exactSymbol.id)];
+                }
+                return filtered.slice(0, 20);
+              }}
+              getOptionLabel={option => `${option.name} (${option.symbol.toUpperCase()})`}
+              value={cryptoList.find(c => c.id === formData.symbol) || null}
+              onChange={(_e, value) => {
+                setFormData(prev => ({ ...prev, symbol: value ? value.id : '' }));
+                if (errors.symbol) {
+                  setErrors(prev => ({ ...prev, symbol: undefined }));
+                }
+              }}
+              renderInput={params => (
+                <TextField
+                  {...params}
+                  label="Criptomoneda"
+                  margin="dense"
+                  required
+                  error={!!errors.symbol}
+                  helperText={
+                    errors.symbol
+                      ? errors.symbol
+                      : typeof params.inputProps.value === 'string' && params.inputProps.value.length < 2
+                        ? 'Escribe al menos 2 letras para buscar.'
+                        : 'Busca y selecciona la criptomoneda. El símbolo se autocompleta.'
+                  }
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {cryptoLoading ? <CircularProgress color="inherit" size={20} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+            />
+          ) : (
+            <TextField
+              margin="dense"
+              label="Símbolo"
+              fullWidth
+              required
+              value={formData.symbol}
+              onChange={handleTextChange('symbol')}
+              error={!!errors.symbol}
+              helperText={errors.symbol || "Ej: AAPL para Apple"}
+            />
+          )}
 
           <TextField
             margin="dense"

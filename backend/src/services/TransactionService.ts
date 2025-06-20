@@ -3,6 +3,20 @@ import type { Transaction } from '../types/index';
 
 const prisma = new PrismaClient();
 
+// Lista cacheada de ids de CoinGecko más comunes (puedes expandirla o cargarla de un archivo/api en el futuro)
+const COINGECKO_IDS = [
+  'bitcoin', 'ethereum', 'tether', 'binancecoin', 'solana', 'usd-coin', 'ripple', 'dogecoin', 'cardano',
+  'avalanche-2', 'tron', 'polkadot', 'chainlink', 'polygon', 'litecoin', 'uniswap', 'bitcoin-cash',
+  'stellar', 'internet-computer', 'filecoin', 'dai', 'aptos', 'arbitrum', 'vechain', 'maker', 'monero',
+  'kaspa', 'render-token', 'optimism', 'the-graph', 'fantom', 'aave', 'eos', 'tezos', 'neo', 'iota',
+  'waves', 'dash', 'zcash', 'chiliz', 'pancakeswap-token', 'curve-dao-token', 'frax', 'gala', 'mina-protocol',
+  'osmosis', '1inch', 'basic-attention-token', 'enjincoin', 'ankr', 'celo', 'ocean-protocol', 'livepeer',
+  'convex-finance', 'balancer', 'sushi', 'injective-protocol', 'terra-luna', 'terra-luna-2', 'terrausd',
+  'lido-dao', 'rocket-pool', 'staked-ether', 'wrapped-bitcoin', 'compound-governance-token', 'yearn-finance',
+  'synthetix-network-token', 'decentraland', 'the-sandbox', 'axie-infinity', 'flow', 'immutable-x', 'gmx',
+  'blur', 'bonk', 'pepe', 'floki', 'shiba-inu', 'safe', 'celestia', 'mantle', 'semaphore', 'other' // 'other' para pruebas
+];
+
 // Función para convertir de PrismaTransaction a Transaction
 function convertPrismaTransactionToTransaction(prismaTransaction: any): Transaction {
   return {
@@ -15,6 +29,13 @@ function convertPrismaTransactionToTransaction(prismaTransaction: any): Transact
 
 export class TransactionService {
   async createTransaction(data: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>): Promise<Transaction> {
+    // Validación: si es cripto, assetName debe ser un id válido de CoinGecko
+    if ((data.assetType === 'CRYPTO' || (!data.assetType && data.type === 'COMPRA')) && data.assetName) {
+      const id = data.assetName.toLowerCase();
+      if (!COINGECKO_IDS.includes(id)) {
+        throw new Error(`El id de CoinGecko '${data.assetName}' no es válido o no está soportado. Selecciona la criptomoneda desde la lista.`);
+      }
+    }
     const transaction = await prisma.transaction.create({
       data: {
         date: new Date(data.date),
@@ -62,8 +83,8 @@ export class TransactionService {
         await prisma.asset.create({
           data: {
             name: data.assetName!,
-            symbol: data.assetName!, // Por ahora usamos el nombre como símbolo
-            type: 'CRYPTO', // Valor por defecto
+            symbol: data.assetName!, // Usar el id de CoinGecko como symbol
+            type: data.assetType || 'CRYPTO', // Usar el tipo recibido o CRYPTO por defecto
             totalUnits: data.units!,
             averagePurchasePrice: data.amount / data.units!,
             currency: data.currency,

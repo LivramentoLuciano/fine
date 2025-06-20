@@ -1,17 +1,20 @@
-import { Box, Paper, Typography, CircularProgress } from '@mui/material';
+import { Box, Paper, Typography, CircularProgress, useTheme, useMediaQuery } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { BarChart } from '@mui/x-charts/BarChart';
+import { LineChart } from '@mui/x-charts/LineChart';
 import { api } from '../services/api';
-import type { Asset } from '../types';
+import type { Asset, Transaction } from '../types';
 import { PriceServiceFactory } from '../services/prices/PriceServiceFactory';
-import ConnectionTest from '../components/ConnectionTest';
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [updatingPrices, setUpdatingPrices] = useState(false);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   // Calcular totales basados en los activos
   const calculateTotals = () => {
@@ -102,10 +105,13 @@ export default function Dashboard() {
     const loadData = async () => {
       try {
         setLoading(true);
-        const assetsData = await api.getAssets();
+        const [assetsData, transactionsData] = await Promise.all([
+          api.getAssets(),
+          api.getTransactions(),
+        ]);
         setAssets(assetsData);
+        setTransactions(transactionsData);
         setError(null);
-        // Actualizar precios inmediatamente después de cargar los activos
         await updatePrices();
       } catch (err) {
         console.error('Error loading dashboard data:', err);
@@ -144,18 +150,114 @@ export default function Dashboard() {
     .map(calculatePerformance)
     .filter((perf): perf is NonNullable<typeof perf> => perf !== null);
 
+  // Calcular rendimiento global (USD)
+  const investedUSD = transactions
+    .filter(t => t.currency === 'USD' && (t.type === 'COMPRA' || t.type === 'INGRESO'))
+    .reduce((acc, t) => acc + t.amount, 0) -
+    transactions.filter(t => t.currency === 'USD' && t.type === 'VENTA').reduce((acc, t) => acc + t.amount, 0);
+  const currentValueUSD = assets.filter(a => a.currency === 'USD').reduce((acc, a) => acc + (a.currentPrice ? a.currentPrice * a.totalUnits : 0), 0);
+  const rendimientoUSD = investedUSD > 0 ? ((currentValueUSD - investedUSD) / investedUSD) * 100 : 0;
+
+  // Mensaje de rendimiento
+  let rendimientoMsg = '';
+  let rendimientoColor = 'info.main';
+  let rendimientoEmoji = '💡';
+  if (rendimientoUSD > 10) {
+    rendimientoMsg = '¡Excelente! Tus inversiones están rindiendo muy bien. ¡Felicitaciones!';
+    rendimientoColor = 'success.main';
+    rendimientoEmoji = '🎉';
+  } else if (rendimientoUSD > 0) {
+    rendimientoMsg = '¡Vas por buen camino! Tus inversiones están en positivo.';
+    rendimientoColor = 'success.light';
+    rendimientoEmoji = '👍';
+  } else if (rendimientoUSD < 0) {
+    rendimientoMsg = 'Atención: tus inversiones están en negativo. Revisa tu estrategia.';
+    rendimientoColor = 'error.main';
+    rendimientoEmoji = '⚠️';
+  } else {
+    rendimientoMsg = 'Aún no hay suficiente información para calcular el rendimiento.';
+    rendimientoColor = 'info.main';
+    rendimientoEmoji = '💡';
+  }
+
+  // Calcular evolución del dinero (USD)
+  // Ordenar transacciones por fecha ascendente
+  const sortedTx = [...transactions.filter(t => t.currency === 'USD')].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  let real = 0;
+  let sinInvertir = 0;
+  const realSeries: { x: string, y: number }[] = [];
+  const sinInvertirSeries: { x: string, y: number }[] = [];
+  sortedTx.forEach(t => {
+    if (t.type === 'INGRESO') {
+      real += t.amount;
+      sinInvertir += t.amount;
+    } else if (t.type === 'RETIRO') {
+      real -= t.amount;
+      sinInvertir -= t.amount;
+    } else if (t.type === 'COMPRA') {
+      real -= t.amount;
+    } else if (t.type === 'VENTA') {
+      real += t.amount;
+    }
+    const fecha = new Date(t.date).toLocaleDateString();
+    realSeries.push({ x: fecha, y: real });
+    sinInvertirSeries.push({ x: fecha, y: sinInvertir });
+  });
+
   return (
     <div>
       <Typography variant="h4" gutterBottom>
         Dashboard {updatingPrices && <CircularProgress size={20} sx={{ ml: 2 }} />}
       </Typography>
 
-      {/* Componente de prueba temporal */}
-      <ConnectionTest />
+      {/* Cartel de valor total del portfolio (ahora arriba de todo) */}
+      <Paper
+        sx={{
+          p: 2,
+          mb: 2,
+          bgcolor: 'primary.light',
+          color: 'white',
+          textAlign: 'center',
+        }}
+      >
+        <Typography variant="h6" gutterBottom>
+          Valor Total del Portfolio
+        </Typography>
+        <Typography variant="h3" component="div">
+          USD {totals.totalInvestedUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Typography>
+        <Typography>
+          ARS {totals.totalInvestedARS.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Typography>
+      </Paper>
+
+      {/* Cartel de rendimiento global */}
+      <Paper sx={{ p: 2, mb: 2, bgcolor: rendimientoColor, color: 'white', textAlign: 'center' }}>
+        <Typography variant="h5" gutterBottom>
+          {rendimientoEmoji} Rendimiento Global USD: {rendimientoUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
+        </Typography>
+        <Typography>{rendimientoMsg}</Typography>
+      </Paper>
+
+      {/* Gráfico de evolución del dinero */}
+      <Paper sx={{ p: 2, mb: 2, overflowX: 'auto' }}>
+        <Typography variant="h6" gutterBottom>
+          Evolución del dinero (USD): Real vs Sin Invertir
+        </Typography>
+        <LineChart
+          xAxis={[{ data: realSeries.map(p => p.x), label: 'Fecha' }]}
+          series={[
+            { data: realSeries.map(p => p.y), label: 'Evolución Real', color: '#1976d2' },
+            { data: sinInvertirSeries.map(p => p.y), label: 'Sin Invertir', color: '#e57373' },
+          ]}
+          height={isMobile ? 200 : 300}
+          width={isMobile ? 320 : undefined}
+        />
+      </Paper>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        {/* Primera fila: Totales */}
-        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+        {/* Primera fila: Totales (ya no incluye el valor total, solo totales invertidos y valor actual) */}
+        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', flexDirection: isMobile ? 'column' : 'row' }}>
           <Paper
             sx={{
               p: 2,
@@ -163,7 +265,8 @@ export default function Dashboard() {
               flexDirection: 'column',
               height: 140,
               flex: 1,
-              minWidth: 300,
+              minWidth: 200,
+              mb: isMobile ? 2 : 0,
             }}
           >
             <Typography variant="h6" gutterBottom>
@@ -184,7 +287,7 @@ export default function Dashboard() {
               flexDirection: 'column',
               height: 140,
               flex: 1,
-              minWidth: 300,
+              minWidth: 200,
             }}
           >
             <Typography variant="h6" gutterBottom>
@@ -200,10 +303,10 @@ export default function Dashboard() {
         </Box>
 
         {/* Segunda fila: Gráficos */}
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, flexDirection: isMobile ? 'column' : 'row' }}>
           {/* Gráfico de Distribución */}
-          <Box sx={{ flex: '1 1 calc(50% - 12px)', minWidth: '300px' }}>
-            <Paper sx={{ p: 2, height: '400px' }}>
+          <Box sx={{ flex: isMobile ? '1 1 100%' : '1 1 calc(50% - 12px)', minWidth: isMobile ? '100%' : '300px' }}>
+            <Paper sx={{ p: 2, height: isMobile ? 'auto' : '400px', mb: isMobile ? 2 : 0 }}>
               <Typography variant="h6" gutterBottom>
                 Distribución de Activos
               </Typography>
@@ -217,10 +320,11 @@ export default function Dashboard() {
                       cornerRadius: 4,
                     },
                   ]}
-                  height={300}
+                  height={isMobile ? 200 : 300}
+                  width={isMobile ? 320 : undefined}
                 />
               ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 10 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 5 }}>
                   No hay datos suficientes para mostrar el gráfico
                 </Typography>
               )}
@@ -228,8 +332,8 @@ export default function Dashboard() {
           </Box>
 
           {/* Rendimiento por Activo */}
-          <Box sx={{ flex: '1 1 calc(50% - 12px)', minWidth: '300px' }}>
-            <Paper sx={{ p: 2, height: '400px' }}>
+          <Box sx={{ flex: isMobile ? '1 1 100%' : '1 1 calc(50% - 12px)', minWidth: isMobile ? '100%' : '300px' }}>
+            <Paper sx={{ p: 2, height: isMobile ? 'auto' : '400px' }}>
               <Typography variant="h6" gutterBottom>
                 Distribución por Moneda
               </Typography>
@@ -247,38 +351,17 @@ export default function Dashboard() {
                       ],
                     },
                   ]}
-                  height={300}
+                  height={isMobile ? 200 : 300}
+                  width={isMobile ? 320 : undefined}
                 />
               ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 10 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 5 }}>
                   No hay datos suficientes para mostrar el gráfico
                 </Typography>
               )}
             </Paper>
           </Box>
         </Box>
-
-        {/* Valor Total */}
-        <Paper
-          sx={{
-            p: 2,
-            display: 'flex',
-            flexDirection: 'column',
-            height: 140,
-            bgcolor: 'primary.light',
-            color: 'white',
-          }}
-        >
-          <Typography variant="h6" gutterBottom>
-            Valor Total del Portfolio
-          </Typography>
-          <Typography variant="h3" component="div">
-            USD {totals.totalInvestedUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </Typography>
-          <Typography>
-            ARS {totals.totalInvestedARS.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </Typography>
-        </Paper>
       </Box>
     </div>
   );

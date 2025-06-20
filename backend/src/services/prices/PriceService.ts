@@ -13,10 +13,10 @@ class CoinGeckoProvider implements PriceProvider {
   async getPrice(symbol: string): Promise<number> {
     try {
       const url = `${this.baseUrl}/simple/price?ids=${symbol.toLowerCase()}&vs_currencies=usd`;
-      console.log(`[CoinGecko] Consultando URL: ${url}`);
+      console.error(`[CoinGecko] Consultando URL: ${url}`);
       const response = await axios.get(url);
-      console.log(`[CoinGecko] Status: ${response.status}`);
-      console.log(`[CoinGecko] Data:`, response.data);
+      console.error(`[CoinGecko] Status: ${response.status}`);
+      console.error(`[CoinGecko] Data:`, response.data);
       if (!response.data[symbol.toLowerCase()] || typeof response.data[symbol.toLowerCase()].usd !== 'number') {
         console.error(`[CoinGecko] No se encontró el campo esperado para '${symbol}' en la respuesta:`, response.data);
         throw new Error(`No se pudo obtener el precio para ${symbol}`);

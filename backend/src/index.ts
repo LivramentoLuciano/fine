@@ -73,6 +73,6 @@ app.use(errorHandler);
 
 // Iniciar servidor
 app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-  console.log(`Health check available at http://localhost:${port}/api/health`);
+  console.error(`Server is running on port ${port}`);
+  console.error(`Health check available at http://localhost:${port}/api/health`);
 }); 

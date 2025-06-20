@@ -12,15 +12,18 @@ class CoinGeckoProvider implements PriceProvider {
 
   async getPrice(symbol: string): Promise<number> {
     try {
-      const response = await axios.get(`${this.baseUrl}/simple/price`, {
-        params: {
-          ids: symbol.toLowerCase(),
-          vs_currencies: 'usd',
-        },
-      });
+      const url = `${this.baseUrl}/simple/price?ids=${symbol.toLowerCase()}&vs_currencies=usd`;
+      console.log(`[CoinGecko] Consultando URL: ${url}`);
+      const response = await axios.get(url);
+      console.log(`[CoinGecko] Status: ${response.status}`);
+      console.log(`[CoinGecko] Data:`, response.data);
+      if (!response.data[symbol.toLowerCase()] || typeof response.data[symbol.toLowerCase()].usd !== 'number') {
+        console.error(`[CoinGecko] No se encontró el campo esperado para '${symbol}' en la respuesta:`, response.data);
+        throw new Error(`No se pudo obtener el precio para ${symbol}`);
+      }
       return response.data[symbol.toLowerCase()].usd;
     } catch (error) {
-      console.error(`Error fetching price from CoinGecko for ${symbol}:`, error);
+      console.error(`[CoinGecko] Error fetching price for ${symbol}:`, error);
       throw new Error(`Failed to fetch price for ${symbol}`);
     }
   }

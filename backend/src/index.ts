@@ -5,12 +5,19 @@ import { createAssetRoutes } from './routes/assetRoutes';
 import { createPriceRoutes } from './routes/priceRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
+import { PriceServiceFactory } from './services/prices/PriceServiceFactory';
+import { CoinGeckoService } from './services/prices/CoinGeckoService';
+import { YahooFinanceService } from './services/prices/YahooFinanceService';
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 // Configuración de variables de entorno
 const EXCHANGE_RATES_API_KEY = process.env.EXCHANGE_RATES_API_KEY || '';
+
+// Inicializar servicios de precios
+PriceServiceFactory.registerService(new CoinGeckoService());
+PriceServiceFactory.registerService(new YahooFinanceService());
 
 // Middleware
 app.use(cors({
@@ -73,6 +80,6 @@ app.use(errorHandler);
 
 // Iniciar servidor
 app.listen(port, () => {
-  console.error(`Server is running on port ${port}`);
-  console.error(`Health check available at http://localhost:${port}/api/health`);
+  console.log(`Server is running on port ${port}`);
+  console.log(`Health check available at http://localhost:${port}/api/health`);
 }); 

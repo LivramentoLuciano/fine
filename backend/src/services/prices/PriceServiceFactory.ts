@@ -1,14 +1,14 @@
 import type { Asset, AssetType } from '../../types/index';
-import type { PriceService } from './PriceService';
+import type { IPriceService } from './PriceService';
 
 export class PriceServiceFactory {
-  private static services: PriceService[] = [];
+  private static services: IPriceService[] = [];
 
-  static registerService(service: PriceService) {
+  static registerService(service: IPriceService) {
     this.services.push(service);
   }
 
-  static getService(assetType: AssetType): PriceService | null {
+  static getService(assetType: AssetType): IPriceService | null {
     return this.services.find(service => service.supports(assetType)) || null;
   }
 

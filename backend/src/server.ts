@@ -5,7 +5,7 @@ import { createAssetRoutes } from './routes/assetRoutes';
 
 // Middleware de logging
 const requestLogger = (req: express.Request, _res: express.Response, next: express.NextFunction) => {
-  console.error(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
   next();
 };
 
@@ -51,6 +51,6 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 });
 
 app.listen(port, () => {
-  console.error(`Server running at http://localhost:${port}`);
-  console.error('Press Ctrl + C to stop the server');
+  console.log(`Server running at http://localhost:${port}`);
+  console.log('Press Ctrl + C to stop the server');
 }); 

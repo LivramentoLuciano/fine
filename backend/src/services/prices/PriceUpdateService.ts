@@ -53,7 +53,7 @@ export class PriceUpdateService {
       );
 
       await Promise.all(updatePromises);
-      console.error(`Updated prices for ${prices.size} assets`);
+      console.log(`Updated prices for ${prices.size} assets`);
     } catch (error) {
       console.error('Error updating prices:', error);
     }

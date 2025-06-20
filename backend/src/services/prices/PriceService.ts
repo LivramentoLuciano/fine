@@ -3,6 +3,11 @@ import type { Asset } from '../../types';
 import type { AssetType, Currency } from '../../types';
 import { ArgentineDollarProvider } from './ArgentineDollarProvider';
 
+export interface IPriceService {
+  getPrice(symbol: string, currency: Currency): Promise<number>;
+  supports(assetType: AssetType): boolean;
+}
+
 export interface PriceProvider {
   getPrice(symbol: string): Promise<number>;
 }
@@ -129,9 +134,4 @@ export class PriceService {
     // Implementation needed
     throw new Error('Method not implemented');
   }
-}
-
-export interface PriceService {
-  getPrice(symbol: string, currency: Currency): Promise<number>;
-  supports(assetType: AssetType): boolean;
 } 

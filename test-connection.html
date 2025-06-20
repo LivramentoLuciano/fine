@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Connection</title>
+</head>
+<body>
+    <h1>Test de Conexión al Backend</h1>
+    <button onclick="testHealth()">Probar Health Check</button>
+    <button onclick="testTransactions()">Probar Transacciones</button>
+    <button onclick="testAssets()">Probar Assets</button>
+    <div id="result"></div>
+
+    <script>
+        const API_URL = 'https://fine-production.up.railway.app/api';
+        
+        async function testHealth() {
+            try {
+                const response = await fetch(`${API_URL}/health`);
+                const data = await response.json();
+                document.getElementById('result').innerHTML = `
+                    <h3>Health Check:</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h3>Error en Health Check:</h3>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+
+        async function testTransactions() {
+            try {
+                const response = await fetch(`${API_URL}/transactions`);
+                const data = await response.json();
+                document.getElementById('result').innerHTML = `
+                    <h3>Transacciones:</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h3>Error en Transacciones:</h3>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+
+        async function testAssets() {
+            try {
+                const response = await fetch(`${API_URL}/assets`);
+                const data = await response.json();
+                document.getElementById('result').innerHTML = `
+                    <h3>Assets:</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h3>Error en Assets:</h3>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+    </script>
+</body>
+</html> 

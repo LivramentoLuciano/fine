@@ -14,11 +14,7 @@ const EXCHANGE_RATES_API_KEY = process.env.EXCHANGE_RATES_API_KEY || '';
 
 // Middleware
 app.use(cors({
-  origin: [
-    'http://localhost:5173', // Desarrollo local
-    'https://fine-production.up.railway.app', // Producción Railway
-    'https://fine-production.up.railway.app:443' // Puerto HTTPS
-  ],
+  origin: true, // Permitir todas las origenes durante pruebas
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true

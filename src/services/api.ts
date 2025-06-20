@@ -1,9 +1,7 @@
 import type { Transaction, Asset } from '../types';
 
-// Usar la URL de Railway en producción, localhost en desarrollo
-const API_URL = import.meta.env.PROD 
-  ? 'https://fine-production.up.railway.app/api'
-  : 'http://localhost:3000/api';
+// Usar Railway tanto en producción como en desarrollo para pruebas
+const API_URL = 'https://fine-production.up.railway.app/api';
 
 const handleResponse = async (response: Response) => {
   if (!response.ok) {

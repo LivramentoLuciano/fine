@@ -5,6 +5,7 @@ import { BarChart } from '@mui/x-charts/BarChart';
 import { api } from '../services/api';
 import type { Asset } from '../types';
 import { PriceServiceFactory } from '../services/prices/PriceServiceFactory';
+import ConnectionTest from '../components/ConnectionTest';
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
@@ -148,6 +149,9 @@ export default function Dashboard() {
       <Typography variant="h4" gutterBottom>
         Dashboard {updatingPrices && <CircularProgress size={20} sx={{ ml: 2 }} />}
       </Typography>
+
+      {/* Componente de prueba temporal */}
+      <ConnectionTest />
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         {/* Primera fila: Totales */}

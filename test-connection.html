@@ -10,6 +10,7 @@
     <button onclick="testHealth()">Probar Health Check</button>
     <button onclick="testTransactions()">Probar Transacciones</button>
     <button onclick="testAssets()">Probar Assets</button>
+    <button onclick="testDBTransactions()" style="background-color: #ff9800; color: white;">Test DB Transacciones</button>
     <div id="result"></div>
 
     <script>
@@ -58,6 +59,22 @@
             } catch (error) {
                 document.getElementById('result').innerHTML = `
                     <h3>Error en Assets:</h3>
+                    <pre>${error.message}</pre>
+                `;
+            }
+        }
+
+        async function testDBTransactions() {
+            try {
+                const response = await fetch(`${API_URL}/test-transactions`);
+                const data = await response.json();
+                document.getElementById('result').innerHTML = `
+                    <h3>Test DB Transacciones:</h3>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h3>Error en Test DB Transacciones:</h3>
                     <pre>${error.message}</pre>
                 `;
             }

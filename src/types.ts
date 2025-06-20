@@ -12,6 +12,7 @@ export interface Transaction {
   assetType?: AssetType;
   units?: number;
   notes?: string;
+  plataforma?: string;
   createdAt: Date;
   updatedAt: Date;
 }

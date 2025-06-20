@@ -24,6 +24,10 @@ export default function ConnectionTest() {
         case 'assets':
           data = await api.getAssets();
           break;
+        case 'test-transactions':
+          const response = await fetch('https://fine-production.up.railway.app/api/test-transactions');
+          data = await response.json();
+          break;
         default:
           throw new Error('Endpoint no válido');
       }
@@ -47,7 +51,7 @@ export default function ConnectionTest() {
         Test de Conexión al Backend
       </Typography>
       
-      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
         <Button 
           variant="contained" 
           onClick={() => testConnection('health')}
@@ -68,6 +72,14 @@ export default function ConnectionTest() {
           disabled={loading}
         >
           Assets
+        </Button>
+        <Button 
+          variant="outlined" 
+          color="warning"
+          onClick={() => testConnection('test-transactions')}
+          disabled={loading}
+        >
+          Test DB Transacciones
         </Button>
       </Box>
 

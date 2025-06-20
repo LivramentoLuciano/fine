@@ -27,6 +27,42 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
+// Endpoint de prueba para transacciones
+app.get('/api/test-transactions', async (_req, res) => {
+  try {
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
+    
+    // Probar conexión a la base de datos
+    await prisma.$connect();
+    
+    // Contar transacciones
+    const count = await prisma.transaction.count();
+    
+    // Intentar obtener transacciones
+    const transactions = await prisma.transaction.findMany({
+      take: 5,
+      orderBy: { date: 'desc' }
+    });
+    
+    await prisma.$disconnect();
+    
+    res.json({ 
+      status: 'ok', 
+      message: 'Database connection successful',
+      count,
+      sampleTransactions: transactions
+    });
+  } catch (error) {
+    console.error('Test transactions error:', error);
+    res.status(500).json({ 
+      status: 'error', 
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
+  }
+});
+
 // Rutas
 app.use('/api/transactions', createTransactionRoutes());
 app.use('/api/assets', createAssetRoutes());

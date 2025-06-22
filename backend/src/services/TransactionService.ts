@@ -44,6 +44,8 @@ export class TransactionService {
         currency: data.currency,
         units: data.units || null,
         assetName: data.assetName || null,
+        assetType: data.assetType || null,
+        plataforma: data.plataforma || null,
         notes: data.notes || null,
       },
     });

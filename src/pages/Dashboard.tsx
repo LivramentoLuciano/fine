@@ -1,11 +1,13 @@
-import { Box, Paper, Typography, CircularProgress, useTheme, useMediaQuery } from '@mui/material';
-import { useState, useEffect } from 'react';
+import { Box, Paper, Typography, CircularProgress, useTheme, useMediaQuery, TableContainer, Table, TableHead, TableBody, TableRow, TableCell } from '@mui/material';
+import { useState, useEffect, useRef } from 'react';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { LineChart } from '@mui/x-charts/LineChart';
 import { api } from '../services/api';
 import type { Asset, Transaction } from '../types';
 import { PriceServiceFactory } from '../services/prices/PriceServiceFactory';
+import { getHistoricalPriceCoinGecko } from '../services/prices/CoinGeckoService';
+import { getHistoricalPriceYahoo } from '../services/prices/YahooFinanceService';
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
@@ -13,8 +15,12 @@ export default function Dashboard() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [updatingPrices, setUpdatingPrices] = useState(false);
+  const [patrimonioSeries, setPatrimonioSeries] = useState<{ x: Date, y: number }[]>([]);
+  const [activosDetallePorFecha, setActivosDetallePorFecha] = useState<{ [fecha: string]: { symbol: string; type: string | undefined; units: number; price: number | null; valor: number }[] }>({});
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const patrimonioSeriesRef = useRef(patrimonioSeries);
+  patrimonioSeriesRef.current = patrimonioSeries;
 
   // Calcular totales basados en los activos
   const calculateTotals = () => {
@@ -75,11 +81,11 @@ export default function Dashboard() {
   };
 
   // Actualizar precios de los activos
-  const updatePrices = async () => {
+  const updatePrices = async (assetsToUpdate = assets) => {
     setUpdatingPrices(true);
     try {
       const updatedAssets = await Promise.all(
-        assets.map(async (asset) => {
+        assetsToUpdate.map(async (asset) => {
           try {
             const price = await PriceServiceFactory.updateAssetPrice(asset);
             return {
@@ -101,6 +107,119 @@ export default function Dashboard() {
     }
   };
 
+  // Utilidad para obtener el valor de los activos en una fecha
+  async function getAssetsValueAtDate(
+    assets: Asset[],
+    transactions: Transaction[],
+    date: string,
+    useCurrentPriceIfToday = false
+  ): Promise<number> {
+    const activos: {
+      [key: string]: { units: number; type: string | undefined; symbol: string; assetObj?: Asset };
+    } = {};
+    transactions.forEach((t: Transaction) => {
+      const tDateStr = (typeof t.date === 'string' ? t.date : new Date(t.date).toISOString()).slice(0, 10);
+      const dateStr = (typeof date === 'string' ? date : new Date(date).toISOString()).slice(0, 10);
+      if (tDateStr > dateStr) return;
+      if (!t.assetName || !t.assetType || !t.units) return;
+      const key = t.assetName + '_' + (t.assetType || '');
+      if (!activos[key]) {
+        activos[key] = { units: 0, type: t.assetType, symbol: t.assetName, assetObj: assets.find(a => a.symbol === t.assetName) };
+      }
+      if (t.type === 'COMPRA') activos[key].units += t.units;
+      if (t.type === 'VENTA') activos[key].units -= t.units;
+    });
+    let total = 0;
+    for (const key in activos) {
+      const { units, type, symbol, assetObj } = activos[key];
+      if (units <= 0) continue;
+      let price: number | null = null;
+      const isToday = (() => {
+        const d = new Date(date);
+        const now = new Date();
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+      })();
+      if (isToday && useCurrentPriceIfToday && assetObj && assetObj.currentPrice) {
+        price = assetObj.currentPrice;
+      } else if (type === 'CRYPTO') {
+        price = await getHistoricalPriceCoinGecko(symbol, date);
+        if ((price === null || price === 0) && isToday && assetObj && assetObj.currentPrice) {
+          price = assetObj.currentPrice;
+        }
+      } else if (type === 'STOCK' || type === 'FOREX') {
+        price = await getHistoricalPriceYahoo(symbol, new Date(date));
+        if ((price === null || price === 0) && isToday && assetObj && assetObj.currentPrice) {
+          price = assetObj.currentPrice;
+        }
+      }
+      // LOG de depuración
+      console.log(`[DEBUG] Fecha: ${date}, Activo: ${symbol}, Tipo: ${type}, Unidades: ${units}, Precio: ${price}`);
+      if (price) total += units * price;
+    }
+    return total;
+  }
+
+  // Utilidad para obtener el array de fechas diarias entre dos fechas (inclusive)
+  function getDateRange(from: Date, to: Date): Date[] {
+    const dates: Date[] = [];
+    let current = new Date(from);
+    while (current <= to) {
+      dates.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+    return dates;
+  }
+
+  // Nueva utilidad: obtener detalle de activos por fecha
+  async function getActivosDetallePorFecha(
+    assets: Asset[],
+    transactions: Transaction[],
+    date: string,
+    useCurrentPriceIfToday = false
+  ): Promise<{ symbol: string; type: string | undefined; units: number; price: number | null; valor: number }[]> {
+    const activos: {
+      [key: string]: { units: number; type: string | undefined; symbol: string; assetObj?: Asset };
+    } = {};
+    transactions.forEach((t: Transaction) => {
+      const tDateStr = (typeof t.date === 'string' ? t.date : new Date(t.date).toISOString()).slice(0, 10);
+      const dateStr = (typeof date === 'string' ? date : new Date(date).toISOString()).slice(0, 10);
+      if (tDateStr > dateStr) return;
+      if (!t.assetName || !t.assetType || !t.units) return;
+      const key = t.assetName + '_' + (t.assetType || '');
+      if (!activos[key]) {
+        activos[key] = { units: 0, type: t.assetType, symbol: t.assetName, assetObj: assets.find(a => a.symbol === t.assetName) };
+      }
+      if (t.type === 'COMPRA') activos[key].units += t.units;
+      if (t.type === 'VENTA') activos[key].units -= t.units;
+    });
+    const detalles: { symbol: string; type: string | undefined; units: number; price: number | null; valor: number }[] = [];
+    for (const key in activos) {
+      const { units, type, symbol, assetObj } = activos[key];
+      if (units <= 0) continue;
+      let price: number | null = null;
+      const isToday = (() => {
+        const d = new Date(date);
+        const now = new Date();
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+      })();
+      if (isToday && useCurrentPriceIfToday && assetObj && assetObj.currentPrice) {
+        price = assetObj.currentPrice;
+      } else if (type === 'CRYPTO') {
+        price = await getHistoricalPriceCoinGecko(symbol, date);
+        if ((price === null || price === 0) && isToday && assetObj && assetObj.currentPrice) {
+          price = assetObj.currentPrice;
+        }
+      } else if (type === 'STOCK' || type === 'FOREX') {
+        price = await getHistoricalPriceYahoo(symbol, new Date(date));
+        if ((price === null || price === 0) && isToday && assetObj && assetObj.currentPrice) {
+          price = assetObj.currentPrice;
+        }
+      }
+      detalles.push({ symbol, type, units, price, valor: price ? units * price : 0 });
+    }
+    return detalles;
+  }
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -109,10 +228,11 @@ export default function Dashboard() {
           api.getAssets(),
           api.getTransactions(),
         ]);
+        console.log('assetsData:', assetsData);
         setAssets(assetsData);
         setTransactions(transactionsData);
         setError(null);
-        await updatePrices();
+        await updatePrices(assetsData);
       } catch (err) {
         console.error('Error loading dashboard data:', err);
         setError('Error al cargar los datos del dashboard');
@@ -127,6 +247,82 @@ export default function Dashboard() {
     const priceUpdateInterval = setInterval(updatePrices, 5 * 60 * 1000);
     return () => clearInterval(priceUpdateInterval);
   }, []);
+
+  useEffect(() => {
+    async function calcularPatrimonio() {
+      if (transactions.length === 0) return;
+      // Encontrar la fecha del primer ingreso
+      const primerIngreso = transactions.reduce((min, t) => {
+        const d = new Date(t.date);
+        return (!min || d < min) ? d : min;
+      }, null as Date | null);
+      const hoy = new Date();
+      if (!primerIngreso) return;
+      const fechas = getDateRange(primerIngreso, hoy);
+      let patrimonio: { x: Date, y: number }[] = [];
+      for (const fecha of fechas) {
+        const fechaStr = fecha.toISOString().slice(0, 10);
+        // Dinero líquido hasta la fecha
+        let liquido = 0;
+        transactions.forEach(t => {
+          if (new Date(t.date) > fecha) return;
+          if (t.type === 'INGRESO') liquido += t.amount;
+          if (t.type === 'RETIRO') liquido -= t.amount;
+          if (t.type === 'COMPRA') liquido -= t.amount;
+          if (t.type === 'VENTA') liquido += t.amount;
+        });
+        // Valor de activos a la fecha (puede ser 0)
+        let valorActivos = 0;
+        try {
+          valorActivos = await getAssetsValueAtDate(assets, transactions, fechaStr, true);
+        } catch (e) {
+          valorActivos = 0;
+        }
+        patrimonio.push({ x: fecha, y: liquido + valorActivos });
+      }
+      setPatrimonioSeries(patrimonio);
+    }
+    if (assets.length && transactions.length) calcularPatrimonio();
+  }, [assets, transactions]);
+
+  // Calcular detalles de activos para cada fecha de patrimonioSeries
+  useEffect(() => {
+    async function calcularDetalles() {
+      const detalles: { [fecha: string]: { symbol: string; type: string | undefined; units: number; price: number | null; valor: number }[] } = {};
+      for (const p of patrimonioSeriesRef.current) {
+        const fechaStr = p.x.toISOString().slice(0, 10);
+        detalles[fechaStr] = await getActivosDetallePorFecha(assets, transactions, fechaStr, true);
+      }
+      setActivosDetallePorFecha(detalles);
+    }
+    if (assets.length && transactions.length && patrimonioSeries.length) calcularDetalles();
+  }, [assets, transactions, patrimonioSeries]);
+
+  function calcularSinInvertirSeriesDiario(transactions: Transaction[]): { x: Date, y: number }[] {
+    if (transactions.length === 0) return [];
+    const primerIngreso = transactions.reduce((min, t) => {
+      const d = new Date(t.date);
+      return (!min || d < min) ? d : min;
+    }, null as Date | null);
+    const hoy = new Date();
+    if (!primerIngreso) return [];
+    const fechas = getDateRange(primerIngreso, hoy);
+    let sinInvertir = 0;
+    const serie: { x: Date, y: number }[] = [];
+    for (const fecha of fechas) {
+      const fechaStr = fecha.toISOString().slice(0, 10);
+      transactions.forEach(t => {
+        if (new Date(t.date).toISOString().slice(0, 10) === fechaStr) {
+          if (t.type === 'INGRESO') sinInvertir += t.amount;
+          if (t.type === 'RETIRO') sinInvertir -= t.amount;
+        }
+      });
+      serie.push({ x: fecha, y: sinInvertir });
+    }
+    return serie;
+  }
+
+  const sinInvertirSeries = calcularSinInvertirSeriesDiario(transactions);
 
   if (loading) {
     return (
@@ -180,30 +376,6 @@ export default function Dashboard() {
     rendimientoEmoji = '💡';
   }
 
-  // Calcular evolución del dinero (USD)
-  // Ordenar transacciones por fecha ascendente
-  const sortedTx = [...transactions.filter(t => t.currency === 'USD')].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  let real = 0;
-  let sinInvertir = 0;
-  const realSeries: { x: string, y: number }[] = [];
-  const sinInvertirSeries: { x: string, y: number }[] = [];
-  sortedTx.forEach(t => {
-    if (t.type === 'INGRESO') {
-      real += t.amount;
-      sinInvertir += t.amount;
-    } else if (t.type === 'RETIRO') {
-      real -= t.amount;
-      sinInvertir -= t.amount;
-    } else if (t.type === 'COMPRA') {
-      real -= t.amount;
-    } else if (t.type === 'VENTA') {
-      real += t.amount;
-    }
-    const fecha = new Date(t.date).toLocaleDateString();
-    realSeries.push({ x: fecha, y: real });
-    sinInvertirSeries.push({ x: fecha, y: sinInvertir });
-  });
-
   return (
     <div>
       <Typography variant="h4" gutterBottom>
@@ -242,17 +414,71 @@ export default function Dashboard() {
       {/* Gráfico de evolución del dinero */}
       <Paper sx={{ p: 2, mb: 2, overflowX: 'auto' }}>
         <Typography variant="h6" gutterBottom>
-          Evolución del dinero (USD): Real vs Sin Invertir
+          Evolución real del patrimonio (USD) vs Dinero sin invertir
         </Typography>
         <LineChart
-          xAxis={[{ data: realSeries.map(p => p.x), label: 'Fecha' }]}
+          xAxis={[
+            {
+              scaleType: 'time',
+              data: patrimonioSeries.map(p => p.x),
+              label: 'Fecha',
+              valueFormatter: (date) => date.toLocaleDateString(),
+            },
+          ]}
           series={[
-            { data: realSeries.map(p => p.y), label: 'Evolución Real', color: '#1976d2' },
+            { data: patrimonioSeries.map(p => p.y), label: 'Patrimonio Real', color: '#1976d2' },
             { data: sinInvertirSeries.map(p => p.y), label: 'Sin Invertir', color: '#e57373' },
           ]}
           height={isMobile ? 200 : 300}
           width={isMobile ? 320 : undefined}
         />
+      </Paper>
+
+      {/* Tabla de debug: Dinero sin invertir y Patrimonio real por fecha */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Typography variant="h6" gutterBottom>
+          Debug: Evolución de Dinero sin Invertir y Patrimonio Real
+        </Typography>
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Fecha</TableCell>
+                <TableCell>Dinero sin invertir (USD)</TableCell>
+                <TableCell>Patrimonio real (USD)</TableCell>
+                <TableCell>Detalle de activos</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {patrimonioSeries.map((p, idx) => {
+                const fechaStr = p.x.toISOString().slice(0, 10);
+                const detalles = activosDetallePorFecha[fechaStr] || [];
+                return (
+                  <TableRow key={p.x.toISOString()}>
+                    <TableCell>{p.x.toLocaleDateString()}</TableCell>
+                    <TableCell>
+                      {sinInvertirSeries[idx] ? sinInvertirSeries[idx].y.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {p.y.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell>
+                      {detalles.length === 0 ? '-' : (
+                        <ul style={{ margin: 0, paddingLeft: 16 }}>
+                          {detalles.map((d) => (
+                            <li key={d.symbol + d.type}>
+                              {d.symbol} ({d.type}): {d.units} u. x ${d.price?.toLocaleString('en-US', { minimumFractionDigits: 2 }) ?? 'N/A'} = <b>${d.valor.toLocaleString('en-US', { minimumFractionDigits: 2 })}</b>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
       </Paper>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>

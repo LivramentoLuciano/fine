@@ -28,4 +28,21 @@ export class YahooFinanceService implements PriceService {
   supports(assetType: AssetType): boolean {
     return assetType === 'STOCK';
   }
+}
+
+// Obtiene el precio histórico de una acción en USD para una fecha (Date)
+export async function getHistoricalPriceYahoo(symbol: string, date: Date): Promise<number | null> {
+  // Yahoo Finance espera timestamps en segundos
+  const start = Math.floor(date.getTime() / 1000);
+  const end = start + 24 * 60 * 60; // Un día después
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    // El precio de cierre está en data.chart.result[0].indicators.quote[0].close[0]
+    return data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.[0] ?? null;
+  } catch (e) {
+    return null;
+  }
 } 

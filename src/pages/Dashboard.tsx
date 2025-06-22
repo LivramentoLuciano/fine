@@ -247,6 +247,50 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assetsBase]);
 
+  // Precargar precios históricos para assets que no los tienen
+  useEffect(() => {
+    async function preloadMissingHistoricalPrices() {
+      if (assets.length === 0 || transactions.length === 0) return;
+
+      try {
+        // Encontrar la fecha de la primera transacción
+        const firstTransaction = transactions.reduce((min, t) => {
+          const d = new Date(t.date);
+          return (!min || d < min) ? d : min;
+        }, null as Date | null);
+
+        if (!firstTransaction) return;
+
+        // Para cada asset, verificar si necesita precarga
+        for (const asset of assets) {
+          try {
+            // Verificar si ya tiene precios históricos
+            const existingPrices = await historicalPriceService.getHistoricalPrices(
+              asset.id,
+              firstTransaction,
+              new Date()
+            );
+
+            // Si tiene menos de 5 precios, hacer precarga
+            if (existingPrices.length < 5) {
+              console.log(`[Dashboard] Preloading historical prices for ${asset.name}`);
+              await historicalPriceService.preloadHistoricalPrices(
+                asset.id,
+                firstTransaction
+              );
+            }
+          } catch (error) {
+            console.error(`[Dashboard] Error preloading prices for ${asset.name}:`, error);
+          }
+        }
+      } catch (error) {
+        console.error('[Dashboard] Error in preloadMissingHistoricalPrices:', error);
+      }
+    }
+
+    preloadMissingHistoricalPrices();
+  }, [assets, transactions]);
+
   useEffect(() => {
     if (assets.length === 0) console.warn('[DEBUG] assets está vacío');
     if (transactions.length === 0) console.warn('[DEBUG] transactions está vacío');

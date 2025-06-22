@@ -217,4 +217,53 @@ export class HistoricalPriceController {
       });
     }
   }
+
+  /**
+   * Precarga precios históricos de un asset desde su primera transacción hasta hoy
+   */
+  async preloadHistoricalPrices(req: Request, res: Response) {
+    try {
+      const { assetId } = req.params;
+      const { firstTransactionDate } = req.body;
+
+      if (!assetId || !firstTransactionDate) {
+        return res.status(400).json({ 
+          error: 'assetId y firstTransactionDate son requeridos' 
+        });
+      }
+
+      // Verificar que el asset existe
+      const asset = await assetService.getAssetById(assetId);
+      if (!asset) {
+        return res.status(404).json({ 
+          error: 'Asset no encontrado' 
+        });
+      }
+
+      const targetDate = new Date(firstTransactionDate);
+      if (isNaN(targetDate.getTime())) {
+        return res.status(400).json({ 
+          error: 'Fecha inválida' 
+        });
+      }
+
+      // Ejecutar precarga
+      const result = await historicalPriceService.preloadHistoricalPrices(
+        asset,
+        targetDate
+      );
+
+      return res.json({ 
+        message: 'Precarga de precios históricos completada',
+        assetId,
+        firstTransactionDate: targetDate.toISOString(),
+        result
+      });
+    } catch (error) {
+      console.error('Error preloading historical prices:', error);
+      return res.status(500).json({ 
+        error: 'Error interno del servidor' 
+      });
+    }
+  }
 } 

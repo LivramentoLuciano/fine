@@ -309,4 +309,105 @@ export class HistoricalPriceService {
       throw error;
     }
   }
+
+  /**
+   * Precarga todos los precios históricos de un asset desde su primera transacción hasta hoy
+   */
+  async preloadHistoricalPrices(
+    asset: Asset,
+    firstTransactionDate: Date,
+    currency: string = 'USD'
+  ): Promise<{ loaded: number; skipped: number; errors: number }> {
+    try {
+      console.log(`[HistoricalPrice] Starting preload for ${asset.name} from ${firstTransactionDate.toISOString().slice(0, 10)} to today`);
+      
+      const today = new Date();
+      const startDate = new Date(firstTransactionDate);
+      startDate.setHours(0, 0, 0, 0);
+      
+      let loaded = 0;
+      let skipped = 0;
+      let errors = 0;
+
+      // Generar array de fechas desde la primera transacción hasta hoy
+      const dates: Date[] = [];
+      let currentDate = new Date(startDate);
+      
+      while (currentDate <= today) {
+        dates.push(new Date(currentDate));
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      console.log(`[HistoricalPrice] Will check ${dates.length} dates for ${asset.name}`);
+
+      // Procesar cada fecha
+      for (const date of dates) {
+        try {
+          const dateStr = date.toISOString().slice(0, 10);
+          const startOfDay = new Date(dateStr + 'T00:00:00.000Z');
+          const endOfDay = new Date(dateStr + 'T23:59:59.999Z');
+
+          // Verificar si ya existe un precio para esta fecha
+          const existingPrice = await prisma.historicalPrice.findFirst({
+            where: {
+              assetId: asset.id,
+              date: {
+                gte: startOfDay,
+                lte: endOfDay
+              }
+            }
+          });
+
+          if (existingPrice) {
+            skipped++;
+            continue; // Ya existe, saltar
+          }
+
+          // Obtener precio de API externa
+          let price: number | null = null;
+          let source: PriceSource = 'MANUAL';
+
+          if (asset.type === 'CRYPTO') {
+            price = await getHistoricalPriceCoinGecko(asset.symbol, dateStr);
+            source = 'COINGECKO';
+          } else if (asset.type === 'STOCK' || asset.type === 'FOREX') {
+            price = await getHistoricalPriceYahoo(asset.symbol, date);
+            source = 'YAHOO';
+          }
+
+          if (price && price > 0) {
+            // Guardar en la base de datos
+            await prisma.historicalPrice.create({
+              data: {
+                assetId: asset.id,
+                date: startOfDay,
+                price,
+                currency,
+                source
+              }
+            });
+
+            loaded++;
+            console.log(`[HistoricalPrice] Loaded price for ${asset.name} on ${dateStr} = $${price}`);
+          } else {
+            console.log(`[HistoricalPrice] No price available for ${asset.name} on ${dateStr}`);
+          }
+
+          // Pequeña pausa para no sobrecargar las APIs
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+        } catch (error) {
+          console.error(`[HistoricalPrice] Error loading price for ${asset.name} on ${date.toISOString().slice(0, 10)}:`, error);
+          errors++;
+        }
+      }
+
+      console.log(`[HistoricalPrice] Preload completed for ${asset.name}: ${loaded} loaded, ${skipped} skipped, ${errors} errors`);
+      return { loaded, skipped, errors };
+
+    } catch (error) {
+      console.error(`[HistoricalPrice] Error in preload for ${asset.name}:`, error);
+      throw error;
+    }
+  }
 } 

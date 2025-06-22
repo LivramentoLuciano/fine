@@ -22,4 +22,7 @@ router.delete('/:id', historicalPriceController.deleteHistoricalPrice.bind(histo
 // Limpiar precios antiguos
 router.delete('/cleanup/old', historicalPriceController.cleanupOldPrices.bind(historicalPriceController));
 
+// Precargar precios históricos de un asset
+router.post('/:assetId/preload', historicalPriceController.preloadHistoricalPrices.bind(historicalPriceController));
+
 export default router; 

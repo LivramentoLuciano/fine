@@ -249,4 +249,10 @@ export const api = {
   async cleanupOldPrices() {
     return this.delete('/historical-prices/cleanup/old');
   },
+
+  async preloadHistoricalPrices(assetId: string, firstTransactionDate: string) {
+    return this.post(`/historical-prices/${assetId}/preload`, {
+      firstTransactionDate
+    });
+  },
 }; 

@@ -170,13 +170,39 @@ export class HistoricalPriceService {
         return {
           ...response.historicalPrice,
           date: new Date(response.historicalPrice.date),
-          createdAt: new Date(response.historicalPrice.createdAt)
+          createdAt: new Date(response.historicalPrice.createdAt),
+          source: response.historicalPrice.source as PriceSource
         };
       }
 
       throw new Error('No se pudo crear el precio histórico');
     } catch (error) {
       console.error(`[HistoricalPrice] Error creating historical price for asset ${data.assetId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Precarga precios históricos de un asset desde su primera transacción hasta hoy
+   */
+  async preloadHistoricalPrices(
+    assetId: string,
+    firstTransactionDate: Date
+  ): Promise<{ loaded: number; skipped: number; errors: number }> {
+    try {
+      const response = await api.preloadHistoricalPrices(
+        assetId,
+        firstTransactionDate.toISOString().slice(0, 10)
+      );
+
+      if (response && response.result) {
+        console.log(`[HistoricalPrice] Preload completed: ${response.result.loaded} loaded, ${response.result.skipped} skipped, ${response.result.errors} errors`);
+        return response.result;
+      }
+
+      throw new Error('No se pudo completar la precarga');
+    } catch (error) {
+      console.error(`[HistoricalPrice] Error preloading historical prices for asset ${assetId}:`, error);
       throw error;
     }
   }

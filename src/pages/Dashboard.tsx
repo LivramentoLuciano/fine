@@ -6,12 +6,12 @@ import { LineChart } from '@mui/x-charts/LineChart';
 import { api } from '../services/api';
 import type { Asset, Transaction } from '../types';
 import { PriceServiceFactory } from '../services/prices/PriceServiceFactory';
-import { getHistoricalPriceCoinGecko } from '../services/prices/CoinGeckoService';
-import { getHistoricalPriceYahoo } from '../services/prices/YahooFinanceService';
+import { HistoricalPriceService } from '../services/HistoricalPriceService';
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [assetsBase, setAssetsBase] = useState<Asset[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [updatingPrices, setUpdatingPrices] = useState(false);
@@ -21,6 +21,9 @@ export default function Dashboard() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const patrimonioSeriesRef = useRef(patrimonioSeries);
   patrimonioSeriesRef.current = patrimonioSeries;
+  
+  // Instancia del servicio de precios históricos
+  const historicalPriceService = new HistoricalPriceService();
 
   // Calcular totales basados en los activos
   const calculateTotals = () => {
@@ -81,7 +84,7 @@ export default function Dashboard() {
   };
 
   // Actualizar precios de los activos
-  const updatePrices = async (assetsToUpdate = assets) => {
+  const updatePrices = async (assetsToUpdate = assetsBase) => {
     setUpdatingPrices(true);
     try {
       const updatedAssets = await Promise.all(
@@ -94,14 +97,17 @@ export default function Dashboard() {
               lastPriceUpdate: price ? new Date().toISOString() : null,
             };
           } catch (error) {
-            console.error(`Error updating price for ${asset.name}:`, error);
-            return asset;
+            console.error(`[DEBUG] Error updating price for ${asset.name}:`, error);
+            // Devuelvo el asset original aunque falle el precio
+            return { ...asset, currentPrice: null };
           }
         })
       );
       setAssets(updatedAssets);
     } catch (err) {
       console.error('Error updating prices:', err);
+      // Si todo falla, igual seteo los assets originales
+      setAssets(assetsToUpdate.map(a => ({ ...a, currentPrice: null })));
     } finally {
       setUpdatingPrices(false);
     }
@@ -141,16 +147,9 @@ export default function Dashboard() {
       })();
       if (isToday && useCurrentPriceIfToday && assetObj && assetObj.currentPrice) {
         price = assetObj.currentPrice;
-      } else if (type === 'CRYPTO') {
-        price = await getHistoricalPriceCoinGecko(symbol, date);
-        if ((price === null || price === 0) && isToday && assetObj && assetObj.currentPrice) {
-          price = assetObj.currentPrice;
-        }
-      } else if (type === 'STOCK' || type === 'FOREX') {
-        price = await getHistoricalPriceYahoo(symbol, new Date(date));
-        if ((price === null || price === 0) && isToday && assetObj && assetObj.currentPrice) {
-          price = assetObj.currentPrice;
-        }
+      } else if (assetObj) {
+        // Usar el nuevo servicio de precios históricos
+        price = await historicalPriceService.getHistoricalPrice(assetObj, new Date(date));
       }
       // LOG de depuración
       console.log(`[DEBUG] Fecha: ${date}, Activo: ${symbol}, Tipo: ${type}, Unidades: ${units}, Precio: ${price}`);
@@ -204,16 +203,9 @@ export default function Dashboard() {
       })();
       if (isToday && useCurrentPriceIfToday && assetObj && assetObj.currentPrice) {
         price = assetObj.currentPrice;
-      } else if (type === 'CRYPTO') {
-        price = await getHistoricalPriceCoinGecko(symbol, date);
-        if ((price === null || price === 0) && isToday && assetObj && assetObj.currentPrice) {
-          price = assetObj.currentPrice;
-        }
-      } else if (type === 'STOCK' || type === 'FOREX') {
-        price = await getHistoricalPriceYahoo(symbol, new Date(date));
-        if ((price === null || price === 0) && isToday && assetObj && assetObj.currentPrice) {
-          price = assetObj.currentPrice;
-        }
+      } else if (assetObj) {
+        // Usar el nuevo servicio de precios históricos
+        price = await historicalPriceService.getHistoricalPrice(assetObj, new Date(date));
       }
       detalles.push({ symbol, type, units, price, valor: price ? units * price : 0 });
     }
@@ -228,37 +220,55 @@ export default function Dashboard() {
           api.getAssets(),
           api.getTransactions(),
         ]);
-        console.log('assetsData:', assetsData);
-        setAssets(assetsData);
+        console.log('[DEBUG] assetsData:', assetsData);
+        console.log('[DEBUG] transactionsData:', transactionsData);
+        setAssetsBase(assetsData);
         setTransactions(transactionsData);
         setError(null);
-        await updatePrices(assetsData);
       } catch (err) {
-        console.error('Error loading dashboard data:', err);
-        setError('Error al cargar los datos del dashboard');
+        console.error('[DEBUG] Error loading dashboard data:', err);
+        setError('Error al cargar los datos del dashboard: ' + (err instanceof Error ? err.message : String(err)));
       } finally {
         setLoading(false);
       }
     };
-
     loadData();
-
     // Actualizar precios cada 5 minutos
-    const priceUpdateInterval = setInterval(updatePrices, 5 * 60 * 1000);
+    const priceUpdateInterval = setInterval(() => updatePrices(assetsBase), 5 * 60 * 1000);
     return () => clearInterval(priceUpdateInterval);
   }, []);
 
+  // Solo actualizar precios cuando cambian los assets base
+  useEffect(() => {
+    if (assetsBase.length > 0) {
+      console.log('[DEBUG] updatePrices triggered with assetsBase:', assetsBase);
+      updatePrices(assetsBase);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assetsBase]);
+
+  useEffect(() => {
+    if (assets.length === 0) console.warn('[DEBUG] assets está vacío');
+    if (transactions.length === 0) console.warn('[DEBUG] transactions está vacío');
+  }, [assets, transactions]);
+
   useEffect(() => {
     async function calcularPatrimonio() {
-      if (transactions.length === 0) return;
+      if (transactions.length === 0) {
+        console.warn('[DEBUG] calcularPatrimonio: transactions vacío');
+        return;
+      }
       // Encontrar la fecha del primer ingreso
       const primerIngreso = transactions.reduce((min, t) => {
         const d = new Date(t.date);
         return (!min || d < min) ? d : min;
       }, null as Date | null);
       const hoy = new Date();
-      if (!primerIngreso) return;
-      const fechas = getDateRange(primerIngreso, hoy);
+      if (!primerIngreso) {
+        console.warn('[DEBUG] calcularPatrimonio: no hay primerIngreso');
+        return;
+      }
+      const fechas = getDateRange(primerIngreso, hoy).filter(f => f <= hoy); // Ignorar fechas futuras
       let patrimonio: { x: Date, y: number }[] = [];
       for (const fecha of fechas) {
         const fechaStr = fecha.toISOString().slice(0, 10);
@@ -276,10 +286,12 @@ export default function Dashboard() {
         try {
           valorActivos = await getAssetsValueAtDate(assets, transactions, fechaStr, true);
         } catch (e) {
+          console.error('[DEBUG] Error en getAssetsValueAtDate:', e);
           valorActivos = 0;
         }
         patrimonio.push({ x: fecha, y: liquido + valorActivos });
       }
+      console.log('[DEBUG] patrimonioSeries calculado:', patrimonio);
       setPatrimonioSeries(patrimonio);
     }
     if (assets.length && transactions.length) calcularPatrimonio();
@@ -326,16 +338,42 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+      <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="400px">
         <CircularProgress />
+        <Typography variant="body2" color="text.secondary" mt={2}>Cargando datos del dashboard...</Typography>
       </Box>
     );
   }
 
   if (error) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+      <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="400px">
         <Typography color="error">{error}</Typography>
+        <Typography variant="body2" color="text.secondary" mt={2}>Debug: assetsBase: {JSON.stringify(assetsBase)}<br/>assets: {JSON.stringify(assets)}<br/>transactions: {JSON.stringify(transactions)}</Typography>
+      </Box>
+    );
+  }
+
+  if (!loading && assetsBase.length > 0 && assets.length === 0) {
+    return (
+      <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="400px">
+        <CircularProgress />
+        <Typography variant="body2" color="text.secondary" mt={2}>Actualizando precios de los activos...</Typography>
+      </Box>
+    );
+  }
+
+  if (!loading && !error && (assets.length === 0 || transactions.length === 0 || patrimonioSeries.length === 0)) {
+    return (
+      <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="400px">
+        <Typography color="warning.main">No hay datos suficientes para mostrar el dashboard.</Typography>
+        <Typography variant="body2" color="text.secondary" mt={2}>
+          Debug:<br/>
+          assetsBase: {JSON.stringify(assetsBase)}<br/>
+          assets: {JSON.stringify(assets)}<br/>
+          transactions: {JSON.stringify(transactions)}<br/>
+          patrimonioSeries: {JSON.stringify(patrimonioSeries)}
+        </Typography>
       </Box>
     );
   }

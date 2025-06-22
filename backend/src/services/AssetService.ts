@@ -2,8 +2,10 @@ import { PrismaClient } from '@prisma/client';
 import type { Asset } from '../types';
 import { convertPrismaAssetToAsset } from '../types';
 import { PriceServiceFactory } from './prices/PriceServiceFactory';
+import { HistoricalPriceService } from './HistoricalPriceService';
 
 const prisma = new PrismaClient();
+const historicalPriceService = new HistoricalPriceService();
 
 export class AssetService {
   async getAllAssets(): Promise<Asset[]> {
@@ -84,6 +86,11 @@ export class AssetService {
         lastPriceUpdate: new Date(),
       },
     });
-    return convertPrismaAssetToAsset(prismaAsset);
+
+    // Guardar el precio actual como histórico
+    const asset = convertPrismaAssetToAsset(prismaAsset);
+    await historicalPriceService.updateCurrentPrice(asset, currentPrice);
+
+    return asset;
   }
 } 

@@ -161,4 +161,92 @@ export const api = {
       throw new Error('Error desconocido al eliminar la transacción');
     }
   },
+
+  // Métodos genéricos para llamadas HTTP
+  async get(endpoint: string) {
+    try {
+      const response = await fetch(`${API_URL}${endpoint}`);
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('API Error:', error);
+      if (error instanceof Error) {
+        if (error.message.includes('Failed to fetch')) {
+          throw new Error('No se pudo conectar con el servidor. Por favor, verifica que el servidor backend esté corriendo.');
+        }
+        throw error;
+      }
+      throw new Error('Error desconocido en la petición GET');
+    }
+  },
+
+  async post(endpoint: string, data?: any) {
+    try {
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: data ? JSON.stringify(data) : undefined,
+      });
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('API Error:', error);
+      if (error instanceof Error) {
+        if (error.message.includes('Failed to fetch')) {
+          throw new Error('No se pudo conectar con el servidor. Por favor, verifica que el servidor backend esté corriendo.');
+        }
+        throw error;
+      }
+      throw new Error('Error desconocido en la petición POST');
+    }
+  },
+
+  async delete(endpoint: string) {
+    try {
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: 'DELETE',
+      });
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('API Error:', error);
+      if (error instanceof Error) {
+        if (error.message.includes('Failed to fetch')) {
+          throw new Error('No se pudo conectar con el servidor. Por favor, verifica que el servidor backend esté corriendo.');
+        }
+        throw error;
+      }
+      throw new Error('Error desconocido en la petición DELETE');
+    }
+  },
+
+  // Métodos específicos para precios históricos
+  async getHistoricalPrice(assetId: string, date: string, currency: string = 'USD') {
+    return this.get(`/historical-prices/${assetId}/${date}?currency=${currency}`);
+  },
+
+  async getHistoricalPrices(assetId: string, startDate: string, endDate: string) {
+    return this.get(`/historical-prices/${assetId}/range?startDate=${startDate}&endDate=${endDate}`);
+  },
+
+  async getLatestPrice(assetId: string) {
+    return this.get(`/historical-prices/${assetId}/latest`);
+  },
+
+  async createHistoricalPrice(data: {
+    assetId: string;
+    date: string;
+    price: number;
+    currency: string;
+    source: string;
+  }) {
+    return this.post('/historical-prices', data);
+  },
+
+  async deleteHistoricalPrice(id: string) {
+    return this.delete(`/historical-prices/${id}`);
+  },
+
+  async cleanupOldPrices() {
+    return this.delete('/historical-prices/cleanup/old');
+  },
 }; 

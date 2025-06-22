@@ -3,6 +3,7 @@ import cors from 'cors';
 import { createTransactionRoutes } from './routes/transactionRoutes';
 import { createAssetRoutes } from './routes/assetRoutes';
 import { createPriceRoutes } from './routes/priceRoutes';
+import historicalPriceRoutes from './routes/historicalPriceRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { PriceServiceFactory } from './services/prices/PriceServiceFactory';
@@ -74,6 +75,7 @@ app.get('/api/test-transactions', async (_req, res) => {
 app.use('/api/transactions', createTransactionRoutes());
 app.use('/api/assets', createAssetRoutes());
 app.use('/api/prices', createPriceRoutes(EXCHANGE_RATES_API_KEY));
+app.use('/api/historical-prices', historicalPriceRoutes);
 
 // Manejador de errores
 app.use(errorHandler);

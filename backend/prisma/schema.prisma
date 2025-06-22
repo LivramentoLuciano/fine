@@ -46,4 +46,18 @@ model Asset {
   @@index([name])
   @@index([symbol])
   @@index([type])
+}
+
+model HistoricalPrice {
+  id        String   @id @default(uuid())
+  assetId   String   // Referencia al Asset
+  date      DateTime // Fecha del precio
+  price     Float    // Precio en USD
+  currency  String   // Moneda del precio (USD, ARS)
+  source    String   // Fuente: 'COINGECKO', 'YAHOO', 'MANUAL'
+  createdAt DateTime @default(now())
+  
+  @@unique([assetId, date]) // Un precio por asset por fecha
+  @@index([assetId])
+  @@index([date])
 } 

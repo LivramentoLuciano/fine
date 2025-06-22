@@ -1,4 +1,4 @@
-import { Box, Paper, Typography, CircularProgress, useTheme, useMediaQuery, TableContainer, Table, TableHead, TableBody, TableRow, TableCell } from '@mui/material';
+import { Box, Paper, Typography, CircularProgress, useTheme, useMediaQuery, TableContainer, Table, TableHead, TableBody, TableRow, TableCell, Button } from '@mui/material';
 import { useState, useEffect, useRef } from 'react';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { BarChart } from '@mui/x-charts/BarChart';
@@ -17,6 +17,17 @@ export default function Dashboard() {
   const [updatingPrices, setUpdatingPrices] = useState(false);
   const [patrimonioSeries, setPatrimonioSeries] = useState<{ x: Date, y: number }[]>([]);
   const [activosDetallePorFecha, setActivosDetallePorFecha] = useState<{ [fecha: string]: { symbol: string; type: string | undefined; units: number; price: number | null; valor: number }[] }>({});
+  const [preloadDebug, setPreloadDebug] = useState<{
+    isPreloading: boolean;
+    currentAsset: string | null;
+    progress: { asset: string; status: string; details: string }[];
+    errors: string[];
+  }>({
+    isPreloading: false,
+    currentAsset: null,
+    progress: [],
+    errors: []
+  });
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const patrimonioSeriesRef = useRef(patrimonioSeries);
@@ -253,17 +264,44 @@ export default function Dashboard() {
       if (assets.length === 0 || transactions.length === 0) return;
 
       try {
+        setPreloadDebug(prev => ({ ...prev, isPreloading: true, progress: [], errors: [] }));
+        
         // Encontrar la fecha de la primera transacción
         const firstTransaction = transactions.reduce((min, t) => {
           const d = new Date(t.date);
           return (!min || d < min) ? d : min;
         }, null as Date | null);
 
-        if (!firstTransaction) return;
+        if (!firstTransaction) {
+          setPreloadDebug(prev => ({ ...prev, isPreloading: false, errors: [...prev.errors, 'No se encontró primera transacción'] }));
+          return;
+        }
+
+        console.log(`[DEBUG] Primera transacción encontrada: ${firstTransaction.toISOString().slice(0, 10)}`);
+        setPreloadDebug(prev => ({ 
+          ...prev, 
+          progress: [...prev.progress, { 
+            asset: 'SYSTEM', 
+            status: 'INFO', 
+            details: `Primera transacción: ${firstTransaction.toISOString().slice(0, 10)}` 
+          }]
+        }));
 
         // Para cada asset, verificar si necesita precarga
         for (const asset of assets) {
           try {
+            setPreloadDebug(prev => ({ ...prev, currentAsset: asset.name }));
+            
+            console.log(`[DEBUG] Verificando asset: ${asset.name} (${asset.id})`);
+            setPreloadDebug(prev => ({ 
+              ...prev, 
+              progress: [...prev.progress, { 
+                asset: asset.name, 
+                status: 'CHECKING', 
+                details: `Verificando precios existentes...` 
+              }]
+            }));
+
             // Verificar si ya tiene precios históricos
             const existingPrices = await historicalPriceService.getHistoricalPrices(
               asset.id,
@@ -271,20 +309,75 @@ export default function Dashboard() {
               new Date()
             );
 
+            console.log(`[DEBUG] ${asset.name} tiene ${existingPrices.length} precios históricos`);
+            setPreloadDebug(prev => ({ 
+              ...prev, 
+              progress: [...prev.progress, { 
+                asset: asset.name, 
+                status: 'INFO', 
+                details: `Encontrados ${existingPrices.length} precios históricos` 
+              }]
+            }));
+
             // Si tiene menos de 5 precios, hacer precarga
             if (existingPrices.length < 5) {
-              console.log(`[Dashboard] Preloading historical prices for ${asset.name}`);
-              await historicalPriceService.preloadHistoricalPrices(
+              console.log(`[DEBUG] Iniciando precarga para ${asset.name}`);
+              setPreloadDebug(prev => ({ 
+                ...prev, 
+                progress: [...prev.progress, { 
+                  asset: asset.name, 
+                  status: 'PRELOADING', 
+                  details: `Iniciando precarga desde ${firstTransaction.toISOString().slice(0, 10)} hasta hoy` 
+                }]
+              }));
+
+              const result = await historicalPriceService.preloadHistoricalPrices(
                 asset.id,
                 firstTransaction
               );
+
+              console.log(`[DEBUG] Precarga completada para ${asset.name}:`, result);
+              setPreloadDebug(prev => ({ 
+                ...prev, 
+                progress: [...prev.progress, { 
+                  asset: asset.name, 
+                  status: 'COMPLETED', 
+                  details: `Precarga completada: ${result.loaded} cargados, ${result.skipped} saltados, ${result.errors} errores` 
+                }]
+              }));
+            } else {
+              setPreloadDebug(prev => ({ 
+                ...prev, 
+                progress: [...prev.progress, { 
+                  asset: asset.name, 
+                  status: 'SKIPPED', 
+                  details: `Ya tiene suficientes precios (${existingPrices.length})` 
+                }]
+              }));
             }
           } catch (error) {
-            console.error(`[Dashboard] Error preloading prices for ${asset.name}:`, error);
+            console.error(`[DEBUG] Error preloading prices for ${asset.name}:`, error);
+            setPreloadDebug(prev => ({ 
+              ...prev, 
+              progress: [...prev.progress, { 
+                asset: asset.name, 
+                status: 'ERROR', 
+                details: `Error: ${error instanceof Error ? error.message : String(error)}` 
+              }],
+              errors: [...prev.errors, `Error en ${asset.name}: ${error instanceof Error ? error.message : String(error)}`]
+            }));
           }
         }
+
+        setPreloadDebug(prev => ({ ...prev, isPreloading: false, currentAsset: null }));
       } catch (error) {
-        console.error('[Dashboard] Error in preloadMissingHistoricalPrices:', error);
+        console.error('[DEBUG] Error in preloadMissingHistoricalPrices:', error);
+        setPreloadDebug(prev => ({ 
+          ...prev, 
+          isPreloading: false, 
+          currentAsset: null,
+          errors: [...prev.errors, `Error general: ${error instanceof Error ? error.message : String(error)}`]
+        }));
       }
     }
 
@@ -561,6 +654,71 @@ export default function Dashboard() {
             </TableBody>
           </Table>
         </TableContainer>
+      </Paper>
+
+      {/* Debug de precarga de precios históricos */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6">
+            Debug: Precarga de Precios Históricos
+            {preloadDebug.isPreloading && <CircularProgress size={20} sx={{ ml: 2 }} />}
+          </Typography>
+          <Button 
+            variant="outlined" 
+            onClick={() => {
+              // Forzar recarga de la página para ejecutar la precarga nuevamente
+              window.location.reload();
+            }}
+            disabled={preloadDebug.isPreloading}
+          >
+            Forzar Precarga
+          </Button>
+        </Box>
+        
+        {preloadDebug.currentAsset && (
+          <Typography variant="body2" color="primary" sx={{ mb: 2 }}>
+            Procesando: {preloadDebug.currentAsset}
+          </Typography>
+        )}
+
+        {preloadDebug.errors.length > 0 && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" color="error" gutterBottom>
+              Errores:
+            </Typography>
+            {preloadDebug.errors.map((error, idx) => (
+              <Typography key={idx} variant="body2" color="error" sx={{ ml: 2 }}>
+                • {error}
+              </Typography>
+            ))}
+          </Box>
+        )}
+
+        {preloadDebug.progress.length > 0 && (
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>
+              Progreso:
+            </Typography>
+            {preloadDebug.progress.map((item, idx) => (
+              <Box key={idx} sx={{ mb: 1, ml: 2 }}>
+                <Typography variant="body2" sx={{ 
+                  color: item.status === 'ERROR' ? 'error.main' : 
+                         item.status === 'COMPLETED' ? 'success.main' : 
+                         item.status === 'SKIPPED' ? 'warning.main' : 
+                         item.status === 'PRELOADING' ? 'info.main' : 'text.primary'
+                }}>
+                  <strong>{item.asset}</strong>: {item.details}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        )}
+
+        {preloadDebug.progress.length === 0 && !preloadDebug.isPreloading && (
+          <Typography variant="body2" color="text.secondary">
+            No hay actividad de precarga
+          </Typography>
+        )}
       </Paper>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>

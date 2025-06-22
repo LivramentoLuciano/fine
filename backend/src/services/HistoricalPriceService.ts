@@ -339,6 +339,7 @@ export class HistoricalPriceService {
       }
 
       console.log(`[HistoricalPrice] Will check ${dates.length} dates for ${asset.name}`);
+      console.log(`[HistoricalPrice] Date range: ${startDate.toISOString().slice(0, 10)} to ${today.toISOString().slice(0, 10)}`);
 
       // Procesar cada fecha
       for (const date of dates) {
@@ -346,6 +347,8 @@ export class HistoricalPriceService {
           const dateStr = date.toISOString().slice(0, 10);
           const startOfDay = new Date(dateStr + 'T00:00:00.000Z');
           const endOfDay = new Date(dateStr + 'T23:59:59.999Z');
+
+          console.log(`[HistoricalPrice] Processing date: ${dateStr} for ${asset.name}`);
 
           // Verificar si ya existe un precio para esta fecha
           const existingPrice = await prisma.historicalPrice.findFirst({
@@ -359,21 +362,28 @@ export class HistoricalPriceService {
           });
 
           if (existingPrice) {
+            console.log(`[HistoricalPrice] Price already exists for ${asset.name} on ${dateStr}: $${existingPrice.price}`);
             skipped++;
             continue; // Ya existe, saltar
           }
+
+          console.log(`[HistoricalPrice] No existing price found for ${asset.name} on ${dateStr}, fetching from API...`);
 
           // Obtener precio de API externa
           let price: number | null = null;
           let source: PriceSource = 'MANUAL';
 
           if (asset.type === 'CRYPTO') {
+            console.log(`[HistoricalPrice] Fetching from CoinGecko for ${asset.symbol} on ${dateStr}`);
             price = await getHistoricalPriceCoinGecko(asset.symbol, dateStr);
             source = 'COINGECKO';
           } else if (asset.type === 'STOCK' || asset.type === 'FOREX') {
+            console.log(`[HistoricalPrice] Fetching from Yahoo for ${asset.symbol} on ${dateStr}`);
             price = await getHistoricalPriceYahoo(asset.symbol, date);
             source = 'YAHOO';
           }
+
+          console.log(`[HistoricalPrice] API returned price for ${asset.name} on ${dateStr}: ${price}`);
 
           if (price && price > 0) {
             // Guardar en la base de datos
@@ -388,9 +398,9 @@ export class HistoricalPriceService {
             });
 
             loaded++;
-            console.log(`[HistoricalPrice] Loaded price for ${asset.name} on ${dateStr} = $${price}`);
+            console.log(`[HistoricalPrice] Saved to DB: ${asset.name} on ${dateStr} = $${price}`);
           } else {
-            console.log(`[HistoricalPrice] No price available for ${asset.name} on ${dateStr}`);
+            console.log(`[HistoricalPrice] No valid price available for ${asset.name} on ${dateStr} (price: ${price})`);
           }
 
           // Pequeña pausa para no sobrecargar las APIs

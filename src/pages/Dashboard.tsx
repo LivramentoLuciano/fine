@@ -268,12 +268,30 @@ export default function Dashboard() {
         
         // Encontrar la fecha de la primera transacción
         const firstTransaction = transactions.reduce((min, t) => {
-          const d = new Date(t.date);
+          // Asegurar que la fecha se convierta correctamente
+          let d: Date;
+          if (typeof t.date === 'string') {
+            d = new Date(t.date);
+          } else if (t.date instanceof Date) {
+            d = t.date;
+          } else {
+            console.error('[DEBUG] Invalid date format:', t.date, typeof t.date);
+            d = new Date(); // fallback
+          }
+          
+          console.log(`[DEBUG] Transaction date: ${t.date}, parsed as: ${d.toISOString()}, valid: ${!isNaN(d.getTime())}`);
           return (!min || d < min) ? d : min;
         }, null as Date | null);
 
         if (!firstTransaction) {
           setPreloadDebug(prev => ({ ...prev, isPreloading: false, errors: [...prev.errors, 'No se encontró primera transacción'] }));
+          return;
+        }
+
+        // Verificar que la fecha es válida
+        if (isNaN(firstTransaction.getTime())) {
+          console.error('[DEBUG] firstTransaction is invalid:', firstTransaction);
+          setPreloadDebug(prev => ({ ...prev, isPreloading: false, errors: [...prev.errors, 'Fecha de primera transacción inválida'] }));
           return;
         }
 
@@ -303,6 +321,11 @@ export default function Dashboard() {
             }));
 
             // Verificar si ya tiene precios históricos
+            console.log(`[DEBUG] Calling getHistoricalPrices for ${asset.name} with dates:`, {
+              startDate: firstTransaction.toISOString(),
+              endDate: new Date().toISOString()
+            });
+            
             const existingPrices = await historicalPriceService.getHistoricalPrices(
               asset.id,
               firstTransaction,
@@ -397,7 +420,16 @@ export default function Dashboard() {
       }
       // Encontrar la fecha del primer ingreso
       const primerIngreso = transactions.reduce((min, t) => {
-        const d = new Date(t.date);
+        // Asegurar que la fecha se convierta correctamente
+        let d: Date;
+        if (typeof t.date === 'string') {
+          d = new Date(t.date);
+        } else if (t.date instanceof Date) {
+          d = t.date;
+        } else {
+          console.error('[DEBUG] Invalid date format in calcularPatrimonio:', t.date, typeof t.date);
+          d = new Date(); // fallback
+        }
         return (!min || d < min) ? d : min;
       }, null as Date | null);
       const hoy = new Date();
@@ -412,7 +444,10 @@ export default function Dashboard() {
         // Dinero líquido hasta la fecha
         let liquido = 0;
         transactions.forEach(t => {
-          if (new Date(t.date) > fecha) return;
+          // En el frontend, t.date siempre es string según el tipo Transaction
+          const tDate = new Date(t.date);
+          if (tDate > fecha) return; // Solo transacciones hasta la fecha actual
+          
           if (t.type === 'INGRESO') liquido += t.amount;
           if (t.type === 'RETIRO') liquido -= t.amount;
           if (t.type === 'COMPRA') liquido -= t.amount;
@@ -450,7 +485,16 @@ export default function Dashboard() {
   function calcularSinInvertirSeriesDiario(transactions: Transaction[]): { x: Date, y: number }[] {
     if (transactions.length === 0) return [];
     const primerIngreso = transactions.reduce((min, t) => {
-      const d = new Date(t.date);
+      // Asegurar que la fecha se convierta correctamente
+      let d: Date;
+      if (typeof t.date === 'string') {
+        d = new Date(t.date);
+      } else if (t.date instanceof Date) {
+        d = t.date;
+      } else {
+        console.error('[DEBUG] Invalid date format in calcularSinInvertirSeriesDiario:', t.date, typeof t.date);
+        d = new Date(); // fallback
+      }
       return (!min || d < min) ? d : min;
     }, null as Date | null);
     const hoy = new Date();
@@ -461,7 +505,10 @@ export default function Dashboard() {
     for (const fecha of fechas) {
       const fechaStr = fecha.toISOString().slice(0, 10);
       transactions.forEach(t => {
-        if (new Date(t.date).toISOString().slice(0, 10) === fechaStr) {
+        // En el frontend, t.date siempre es string según el tipo Transaction
+        const tDateStr = String(t.date).slice(0, 10);
+        
+        if (tDateStr === fechaStr) {
           if (t.type === 'INGRESO') sinInvertir += t.amount;
           if (t.type === 'RETIRO') sinInvertir -= t.amount;
         }

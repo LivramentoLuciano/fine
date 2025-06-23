@@ -225,7 +225,9 @@ export const api = {
   },
 
   async getHistoricalPrices(assetId: string, startDate: string, endDate: string) {
-    return this.get(`/historical-prices/${assetId}/range?startDate=${startDate}&endDate=${endDate}`);
+    const url = `/historical-prices/${assetId}/range?startDate=${startDate}&endDate=${endDate}`;
+    console.log(`[API] getHistoricalPrices URL: ${url}`);
+    return this.get(url);
   },
 
   async getLatestPrice(assetId: string) {

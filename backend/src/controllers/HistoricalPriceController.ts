@@ -63,27 +63,54 @@ export class HistoricalPriceController {
       const { assetId } = req.params;
       const { startDate, endDate } = req.query;
 
+      console.log(`[Backend] getHistoricalPrices called with:`, {
+        assetId,
+        startDate,
+        endDate,
+        startDateType: typeof startDate,
+        endDateType: typeof endDate
+      });
+
       if (!assetId || !startDate || !endDate) {
+        console.log(`[Backend] Missing required parameters:`, { assetId, startDate, endDate });
         return res.status(400).json({ 
           error: 'assetId, startDate y endDate son requeridos' 
         });
       }
 
+      console.log(`[Backend] About to parse dates:`, { startDate, endDate });
       const start = new Date(startDate as string);
       const end = new Date(endDate as string);
 
+      console.log(`[Backend] Parsed dates:`, {
+        start: start.toISOString(),
+        end: end.toISOString(),
+        startValid: !isNaN(start.getTime()),
+        endValid: !isNaN(end.getTime()),
+        startTime: start.getTime(),
+        endTime: end.getTime()
+      });
+
       if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        console.log(`[Backend] Invalid dates detected:`, {
+          startIsNaN: isNaN(start.getTime()),
+          endIsNaN: isNaN(end.getTime()),
+          start: startDate,
+          end: endDate
+        });
         return res.status(400).json({ 
           error: 'Fechas inválidas' 
         });
       }
 
+      console.log(`[Backend] Dates are valid, calling service...`);
       const prices = await historicalPriceService.getHistoricalPrices(
         assetId, 
         start, 
         end
       );
 
+      console.log(`[Backend] Service returned ${prices.length} prices`);
       return res.json({ 
         assetId, 
         startDate: start.toISOString(), 

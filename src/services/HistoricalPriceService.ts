@@ -55,6 +55,14 @@ export class HistoricalPriceService {
       const startDateStr = startDate.toISOString().slice(0, 10);
       const endDateStr = endDate.toISOString().slice(0, 10);
       
+      console.log(`[HistoricalPrice] getHistoricalPrices called with:`, {
+        assetId,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        startDateStr,
+        endDateStr
+      });
+      
       const response = await api.getHistoricalPrices(assetId, startDateStr, endDateStr);
       
       if (response && response.prices) {

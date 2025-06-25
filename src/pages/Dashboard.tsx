@@ -1,554 +1,215 @@
-import { Box, Paper, Typography, CircularProgress, useTheme, useMediaQuery, TableContainer, Table, TableHead, TableBody, TableRow, TableCell, Button } from '@mui/material';
-import { useState, useEffect, useRef } from 'react';
-import { PieChart } from '@mui/x-charts/PieChart';
-import { BarChart } from '@mui/x-charts/BarChart';
-import { LineChart } from '@mui/x-charts/LineChart';
+import { Box, Paper, Typography, CircularProgress, TableContainer, Table, TableHead, TableBody, TableRow, TableCell } from '@mui/material';
+import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import type { Asset, Transaction } from '../types';
-import { PriceServiceFactory } from '../services/prices/PriceServiceFactory';
-import { HistoricalPriceService } from '../services/HistoricalPriceService';
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [assetsBase, setAssetsBase] = useState<Asset[]>([]);
-  const [assets, setAssets] = useState<Asset[]>([]);
+  const [totalPortfolioValue, setTotalPortfolioValue] = useState<number>(0);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [updatingPrices, setUpdatingPrices] = useState(false);
-  const [patrimonioSeries, setPatrimonioSeries] = useState<{ x: Date, y: number }[]>([]);
-  const [activosDetallePorFecha, setActivosDetallePorFecha] = useState<{ [fecha: string]: { symbol: string; type: string | undefined; units: number; price: number | null; valor: number }[] }>({});
-  const [preloadDebug, setPreloadDebug] = useState<{
-    isPreloading: boolean;
-    currentAsset: string | null;
-    progress: { asset: string; status: string; details: string }[];
-    errors: string[];
-  }>({
-    isPreloading: false,
-    currentAsset: null,
-    progress: [],
-    errors: []
-  });
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const patrimonioSeriesRef = useRef(patrimonioSeries);
-  patrimonioSeriesRef.current = patrimonioSeries;
-  
-  // Instancia del servicio de precios históricos
-  const historicalPriceService = new HistoricalPriceService();
+  const [dailyData, setDailyData] = useState<Array<{date: string, asset: string, portfolioValue: number}>>([]);
+  const [ethereumPrices, setEthereumPrices] = useState<{[date: string]: number}>({});
 
-  // Calcular totales basados en los activos
-  const calculateTotals = () => {
-    return assets.reduce((acc, asset) => {
-      const currentValue = asset.currentPrice 
-        ? asset.totalUnits * asset.currentPrice
-        : asset.totalUnits * asset.averagePurchasePrice;
-      
-      const investedValue = asset.totalUnits * asset.averagePurchasePrice;
-      
-      if (asset.currency === 'USD') {
-        acc.totalInvestedUSD += investedValue;
-        acc.currentValueUSD += currentValue;
-      } else if (asset.currency === 'ARS') {
-        acc.totalInvestedARS += investedValue;
-        acc.currentValueARS += currentValue;
-      }
-      return acc;
-    }, {
-      totalInvestedUSD: 0,
-      totalInvestedARS: 0,
-      currentValueUSD: 0,
-      currentValueARS: 0,
-    });
-  };
-
-  // Preparar datos para el gráfico de distribución
-  const preparePieChartData = () => {
-    return assets
-      .filter(asset => {
-        const value = asset.currentPrice 
-          ? asset.totalUnits * asset.currentPrice
-          : asset.totalUnits * asset.averagePurchasePrice;
-        return value > 0;
-      })
-      .map(asset => ({
-        id: asset.id,
-        value: asset.currentPrice 
-          ? asset.totalUnits * asset.currentPrice
-          : asset.totalUnits * asset.averagePurchasePrice,
-        label: `${asset.name} (${asset.currency})`,
-      }));
-  };
-
-  // Calcular rendimiento por activo
-  const calculatePerformance = (asset: Asset) => {
-    if (!asset.currentPrice) return null;
-    
-    const invested = asset.totalUnits * asset.averagePurchasePrice;
-    const current = asset.totalUnits * asset.currentPrice;
-    const performance = ((current - invested) / invested) * 100;
-    
-    return {
-      name: asset.name,
-      performance,
-      currency: asset.currency,
-    };
-  };
-
-  // Actualizar precios de los activos
-  const updatePrices = async (assetsToUpdate = assetsBase) => {
-    setUpdatingPrices(true);
+  // Función para obtener precio histórico de Ethereum
+  const getEthereumHistoricalPrice = async (date: string) => {
     try {
-      const updatedAssets = await Promise.all(
-        assetsToUpdate.map(async (asset) => {
-          try {
-            const price = await PriceServiceFactory.updateAssetPrice(asset);
-            return {
-              ...asset,
-              currentPrice: price ?? null,
-              lastPriceUpdate: price ? new Date().toISOString() : null,
-            };
-          } catch (error) {
-            console.error(`[DEBUG] Error updating price for ${asset.name}:`, error);
-            // Devuelvo el asset original aunque falle el precio
-            return { ...asset, currentPrice: null };
-          }
-        })
+      // Por ahora usamos datos mock para evitar problemas de CORS
+      // En el futuro esto se moverá al backend
+      const basePrice = 3000; // Precio base de Ethereum
+      const dateObj = new Date(date);
+      const daysSince2020 = Math.floor((dateObj.getTime() - new Date('2020-01-01').getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Simular variación de precio basada en la fecha
+      const variation = Math.sin(daysSince2020 * 0.01) * 500; // Variación sinusoidal
+      const randomVariation = (Math.random() - 0.5) * 200; // Variación aleatoria
+      
+      const price = Math.max(100, basePrice + variation + randomVariation);
+      
+      console.log(`[DEBUG] Precio simulado de Ethereum para ${date}: $${price.toFixed(2)}`);
+      return price;
+      
+      /* Código original comentado para evitar CORS
+      // Convertir fecha a timestamp (Unix timestamp en segundos)
+      const timestamp = Math.floor(new Date(date).getTime() / 1000);
+      
+      // Usar CoinGecko API para obtener precio histórico
+      // Cambiamos a usar el endpoint de precio histórico por fecha específica
+      const response = await fetch(
+        `https://api.coingecko.com/api/v3/coins/ethereum/history?date=${date}&localization=false`
       );
-      setAssets(updatedAssets);
-    } catch (err) {
-      console.error('Error updating prices:', err);
-      // Si todo falla, igual seteo los assets originales
-      setAssets(assetsToUpdate.map(a => ({ ...a, currentPrice: null })));
-    } finally {
-      setUpdatingPrices(false);
+      
+      if (!response.ok) {
+        console.warn(`[DEBUG] No se pudo obtener precio de Ethereum para ${date}: ${response.status}`);
+        return 0;
+      }
+      
+      const data = await response.json();
+      
+      if (data.market_data && data.market_data.current_price && data.market_data.current_price.usd) {
+        const price = data.market_data.current_price.usd;
+        console.log(`[DEBUG] Precio de Ethereum para ${date}: $${price}`);
+        return price;
+      }
+      
+      console.warn(`[DEBUG] No se encontró precio de Ethereum para ${date}`);
+      return 0;
+      */
+    } catch (error) {
+      console.error(`[DEBUG] Error obteniendo precio de Ethereum para ${date}:`, error);
+      return 0;
     }
   };
 
-  // Utilidad para obtener el valor de los activos en una fecha
-  async function getAssetsValueAtDate(
-    assets: Asset[],
-    transactions: Transaction[],
-    date: string,
-    useCurrentPriceIfToday = false
-  ): Promise<number> {
-    const activos: {
-      [key: string]: { units: number; type: string | undefined; symbol: string; assetObj?: Asset };
-    } = {};
-    transactions.forEach((t: Transaction) => {
-      const tDateStr = (typeof t.date === 'string' ? t.date : new Date(t.date).toISOString()).slice(0, 10);
-      const dateStr = (typeof date === 'string' ? date : new Date(date).toISOString()).slice(0, 10);
-      if (tDateStr > dateStr) return;
-      if (!t.assetName || !t.assetType || !t.units) return;
-      const key = t.assetName + '_' + (t.assetType || '');
-      if (!activos[key]) {
-        activos[key] = { units: 0, type: t.assetType, symbol: t.assetName, assetObj: assets.find(a => a.symbol === t.assetName) };
-      }
-      if (t.type === 'COMPRA') activos[key].units += t.units;
-      if (t.type === 'VENTA') activos[key].units -= t.units;
-    });
-    let total = 0;
-    for (const key in activos) {
-      const { units, type, symbol, assetObj } = activos[key];
-      if (units <= 0) continue;
-      let price: number | null = null;
-      const isToday = (() => {
-        const d = new Date(date);
-        const now = new Date();
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-      })();
-      if (isToday && useCurrentPriceIfToday && assetObj && assetObj.currentPrice) {
-        price = assetObj.currentPrice;
-      } else if (assetObj) {
-        // Usar el nuevo servicio de precios históricos
-        price = await historicalPriceService.getHistoricalPrice(assetObj, new Date(date));
-      }
-      // LOG de depuración
-      console.log(`[DEBUG] Fecha: ${date}, Activo: ${symbol}, Tipo: ${type}, Unidades: ${units}, Precio: ${price}`);
-      if (price) total += units * price;
+  // Función para obtener todos los precios históricos de Ethereum
+  const getEthereumPricesForDates = async (dates: string[]) => {
+    const prices: {[date: string]: number} = {};
+    
+    for (const date of dates) {
+      const price = await getEthereumHistoricalPrice(date);
+      prices[date] = price;
+      
+      // Pequeña pausa para no sobrecargar la API
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
-    return total;
-  }
+    
+    return prices;
+  };
 
-  // Utilidad para obtener el array de fechas diarias entre dos fechas (inclusive)
-  function getDateRange(from: Date, to: Date): Date[] {
-    const dates: Date[] = [];
-    let current = new Date(from);
-    while (current <= to) {
-      dates.push(new Date(current));
-      current.setDate(current.getDate() + 1);
+  // Función para generar array de fechas desde la primera transacción hasta hoy
+  const generateDailyData = (transactions: Transaction[]) => {
+    if (transactions.length === 0) return [];
+
+    // Obtener la fecha de la primera transacción
+    const firstTransactionDate = new Date(Math.min(...transactions.map(t => new Date(t.date).getTime())));
+    
+    // Obtener la fecha de hoy en la zona horaria local
+    const today = new Date();
+    
+    // Crear array de fechas
+    const dates: Array<{date: string, asset: string, portfolioValue: number}> = [];
+    const currentDate = new Date(firstTransactionDate);
+    
+    while (currentDate <= today) {
+      const dateString = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Buscar si hay transacciones en esta fecha
+      const transactionOnThisDate = transactions.find(t => 
+        new Date(t.date).toISOString().split('T')[0] === dateString
+      );
+      
+      // Calcular patrimonio hasta esta fecha
+      let liquidMoney = 0;
+      let investedMoney = 0;
+      
+      transactions.forEach((transaction: Transaction) => {
+        const transactionDate = new Date(transaction.date).toISOString().split('T')[0];
+        if (transactionDate <= dateString) {
+          if (transaction.type === 'INGRESO') {
+            liquidMoney += transaction.amount;
+          } else if (transaction.type === 'RETIRO') {
+            liquidMoney -= transaction.amount;
+          } else if (transaction.type === 'COMPRA') {
+            liquidMoney -= transaction.amount;
+            investedMoney += transaction.amount;
+          } else if (transaction.type === 'VENTA') {
+            liquidMoney += transaction.amount;
+            investedMoney -= transaction.amount;
+          }
+        }
+      });
+      
+      const portfolioValue = liquidMoney + investedMoney;
+      
+      dates.push({
+        date: dateString,
+        asset: transactionOnThisDate ? transactionOnThisDate.assetName || '-' : '-',
+        portfolioValue: portfolioValue
+      });
+      
+      // Avanzar al siguiente día
+      currentDate.setDate(currentDate.getDate() + 1);
     }
+    
     return dates;
-  }
-
-  // Nueva utilidad: obtener detalle de activos por fecha
-  async function getActivosDetallePorFecha(
-    assets: Asset[],
-    transactions: Transaction[],
-    date: string,
-    useCurrentPriceIfToday = false
-  ): Promise<{ symbol: string; type: string | undefined; units: number; price: number | null; valor: number }[]> {
-    const activos: {
-      [key: string]: { units: number; type: string | undefined; symbol: string; assetObj?: Asset };
-    } = {};
-    transactions.forEach((t: Transaction) => {
-      const tDateStr = (typeof t.date === 'string' ? t.date : new Date(t.date).toISOString()).slice(0, 10);
-      const dateStr = (typeof date === 'string' ? date : new Date(date).toISOString()).slice(0, 10);
-      if (tDateStr > dateStr) return;
-      if (!t.assetName || !t.assetType || !t.units) return;
-      const key = t.assetName + '_' + (t.assetType || '');
-      if (!activos[key]) {
-        activos[key] = { units: 0, type: t.assetType, symbol: t.assetName, assetObj: assets.find(a => a.symbol === t.assetName) };
-      }
-      if (t.type === 'COMPRA') activos[key].units += t.units;
-      if (t.type === 'VENTA') activos[key].units -= t.units;
-    });
-    const detalles: { symbol: string; type: string | undefined; units: number; price: number | null; valor: number }[] = [];
-    for (const key in activos) {
-      const { units, type, symbol, assetObj } = activos[key];
-      if (units <= 0) continue;
-      let price: number | null = null;
-      const isToday = (() => {
-        const d = new Date(date);
-        const now = new Date();
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-      })();
-      if (isToday && useCurrentPriceIfToday && assetObj && assetObj.currentPrice) {
-        price = assetObj.currentPrice;
-      } else if (assetObj) {
-        // Usar el nuevo servicio de precios históricos
-        price = await historicalPriceService.getHistoricalPrice(assetObj, new Date(date));
-      }
-      detalles.push({ symbol, type, units, price, valor: price ? units * price : 0 });
-    }
-    return detalles;
-  }
+  };
 
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
+        console.log('[DEBUG] Cargando datos del dashboard...');
+        
         const [assetsData, transactionsData] = await Promise.all([
           api.getAssets(),
           api.getTransactions(),
         ]);
-        console.log('[DEBUG] assetsData:', assetsData);
-        console.log('[DEBUG] transactionsData:', transactionsData);
-        setAssetsBase(assetsData);
+        
+        console.log('[DEBUG] Assets cargados:', assetsData);
+        console.log('[DEBUG] Transactions cargados:', transactionsData);
+        
+        // Calcular dinero líquido
+        let liquidMoney = 0;
+        transactionsData.forEach((transaction: Transaction) => {
+          if (transaction.type === 'INGRESO') {
+            liquidMoney += transaction.amount;
+          } else if (transaction.type === 'RETIRO') {
+            liquidMoney -= transaction.amount;
+          } else if (transaction.type === 'COMPRA') {
+            liquidMoney -= transaction.amount;
+          } else if (transaction.type === 'VENTA') {
+            liquidMoney += transaction.amount;
+          }
+        });
+        
+        console.log('[DEBUG] Dinero líquido calculado:', liquidMoney);
+        
+        // Calcular valor de activos
+        let assetsValue = 0;
+        assetsData.forEach((asset: Asset) => {
+          if (asset.currentPrice && asset.totalUnits) {
+            assetsValue += asset.currentPrice * asset.totalUnits;
+          }
+        });
+        
+        console.log('[DEBUG] Valor de activos calculado:', assetsValue);
+        
+        // Valor total del portfolio
+        const totalValue = liquidMoney + assetsValue;
+        console.log('[DEBUG] Valor total del portfolio:', totalValue);
+        
+        // Generar datos diarios
+        const dailyDataArray = generateDailyData(transactionsData);
+        console.log('[DEBUG] Datos diarios generados:', dailyDataArray);
+        
+        // Obtener precios históricos de Ethereum
+        const dates = dailyDataArray.map(day => day.date);
+        const ethereumPricesData = await getEthereumPricesForDates(dates);
+        console.log('[DEBUG] Precios de Ethereum obtenidos:', ethereumPricesData);
+        
+        setTotalPortfolioValue(totalValue);
         setTransactions(transactionsData);
+        setDailyData(dailyDataArray);
+        setEthereumPrices(ethereumPricesData);
         setError(null);
       } catch (err) {
-        console.error('[DEBUG] Error loading dashboard data:', err);
-        setError('Error al cargar los datos del dashboard: ' + (err instanceof Error ? err.message : String(err)));
+        console.error('[DEBUG] Error cargando datos:', err);
+        setError('Error al cargar los datos: ' + (err instanceof Error ? err.message : String(err)));
       } finally {
         setLoading(false);
       }
     };
+
     loadData();
-    // Actualizar precios cada 5 minutos
-    const priceUpdateInterval = setInterval(() => updatePrices(assetsBase), 5 * 60 * 1000);
-    return () => clearInterval(priceUpdateInterval);
   }, []);
-
-  // Solo actualizar precios cuando cambian los assets base
-  useEffect(() => {
-    if (assetsBase.length > 0) {
-      console.log('[DEBUG] updatePrices triggered with assetsBase:', assetsBase);
-      updatePrices(assetsBase);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assetsBase]);
-
-  // Precargar precios históricos para assets que no los tienen
-  useEffect(() => {
-    async function preloadMissingHistoricalPrices() {
-      if (assets.length === 0 || transactions.length === 0) return;
-
-      try {
-        setPreloadDebug(prev => ({ ...prev, isPreloading: true, progress: [], errors: [] }));
-        
-        // Encontrar la fecha de la primera transacción
-        const firstTransaction = transactions.reduce((min, t) => {
-          // Asegurar que la fecha se convierta correctamente
-          let d: Date;
-          if (typeof t.date === 'string') {
-            d = new Date(t.date);
-          } else if (t.date instanceof Date) {
-            d = t.date;
-          } else {
-            console.error('[DEBUG] Invalid date format:', t.date, typeof t.date);
-            d = new Date(); // fallback
-          }
-          
-          console.log(`[DEBUG] Transaction date: ${t.date}, parsed as: ${d.toISOString()}, valid: ${!isNaN(d.getTime())}`);
-          return (!min || d < min) ? d : min;
-        }, null as Date | null);
-
-        if (!firstTransaction) {
-          setPreloadDebug(prev => ({ ...prev, isPreloading: false, errors: [...prev.errors, 'No se encontró primera transacción'] }));
-          return;
-        }
-
-        // Verificar que la fecha es válida
-        if (isNaN(firstTransaction.getTime())) {
-          console.error('[DEBUG] firstTransaction is invalid:', firstTransaction);
-          setPreloadDebug(prev => ({ ...prev, isPreloading: false, errors: [...prev.errors, 'Fecha de primera transacción inválida'] }));
-          return;
-        }
-
-        console.log(`[DEBUG] Primera transacción encontrada: ${firstTransaction.toISOString().slice(0, 10)}`);
-        setPreloadDebug(prev => ({ 
-          ...prev, 
-          progress: [...prev.progress, { 
-            asset: 'SYSTEM', 
-            status: 'INFO', 
-            details: `Primera transacción: ${firstTransaction.toISOString().slice(0, 10)}` 
-          }]
-        }));
-
-        // Validar que la primera transacción no sea futura
-        const today = new Date();
-        const startDate = firstTransaction > today ? today : firstTransaction;
-        
-        console.log(`[DEBUG] Usando fecha de inicio: ${startDate.toISOString().slice(0, 10)} (${firstTransaction > today ? 'ajustada a hoy' : 'original'})`);
-        setPreloadDebug(prev => ({ 
-          ...prev, 
-          progress: [...prev.progress, { 
-            asset: 'SYSTEM', 
-            status: 'INFO', 
-            details: `Fecha de inicio ajustada: ${startDate.toISOString().slice(0, 10)}` 
-          }]
-        }));
-
-        // Para cada asset, verificar si necesita precarga
-        for (const asset of assets) {
-          try {
-            setPreloadDebug(prev => ({ ...prev, currentAsset: asset.name }));
-            
-            console.log(`[DEBUG] Verificando asset: ${asset.name} (${asset.id})`);
-            setPreloadDebug(prev => ({ 
-              ...prev, 
-              progress: [...prev.progress, { 
-                asset: asset.name, 
-                status: 'CHECKING', 
-                details: `Verificando precios existentes...` 
-              }]
-            }));
-
-            // Verificar si ya tiene precios históricos
-            console.log(`[DEBUG] Calling getHistoricalPrices for ${asset.name} with dates:`, {
-              startDate: startDate.toISOString(),
-              endDate: today.toISOString()
-            });
-            
-            const existingPrices = await historicalPriceService.getHistoricalPrices(
-              asset.id,
-              startDate,
-              today
-            );
-
-            console.log(`[DEBUG] ${asset.name} tiene ${existingPrices.length} precios históricos`);
-            setPreloadDebug(prev => ({ 
-              ...prev, 
-              progress: [...prev.progress, { 
-                asset: asset.name, 
-                status: 'INFO', 
-                details: `Encontrados ${existingPrices.length} precios históricos` 
-              }]
-            }));
-
-            // Si tiene menos de 5 precios, hacer precarga
-            if (existingPrices.length < 5) {
-              console.log(`[DEBUG] Iniciando precarga para ${asset.name}`);
-              setPreloadDebug(prev => ({ 
-                ...prev, 
-                progress: [...prev.progress, { 
-                  asset: asset.name, 
-                  status: 'PRELOADING', 
-                  details: `Iniciando precarga desde ${startDate.toISOString().slice(0, 10)} hasta hoy` 
-                }]
-              }));
-
-              const result = await historicalPriceService.preloadHistoricalPrices(
-                asset.id,
-                startDate
-              );
-
-              console.log(`[DEBUG] Precarga completada para ${asset.name}:`, result);
-              setPreloadDebug(prev => ({ 
-                ...prev, 
-                progress: [...prev.progress, { 
-                  asset: asset.name, 
-                  status: 'COMPLETED', 
-                  details: `Precarga completada: ${result.loaded} cargados, ${result.skipped} saltados, ${result.errors} errores` 
-                }]
-              }));
-            } else {
-              setPreloadDebug(prev => ({ 
-                ...prev, 
-                progress: [...prev.progress, { 
-                  asset: asset.name, 
-                  status: 'SKIPPED', 
-                  details: `Ya tiene suficientes precios (${existingPrices.length})` 
-                }]
-              }));
-            }
-          } catch (error) {
-            console.error(`[DEBUG] Error preloading prices for ${asset.name}:`, error);
-            setPreloadDebug(prev => ({ 
-              ...prev, 
-              progress: [...prev.progress, { 
-                asset: asset.name, 
-                status: 'ERROR', 
-                details: `Error: ${error instanceof Error ? error.message : String(error)}` 
-              }],
-              errors: [...prev.errors, `Error en ${asset.name}: ${error instanceof Error ? error.message : String(error)}`]
-            }));
-          }
-        }
-
-        setPreloadDebug(prev => ({ ...prev, isPreloading: false, currentAsset: null }));
-      } catch (error) {
-        console.error('[DEBUG] Error in preloadMissingHistoricalPrices:', error);
-        setPreloadDebug(prev => ({ 
-          ...prev, 
-          isPreloading: false, 
-          currentAsset: null,
-          errors: [...prev.errors, `Error general: ${error instanceof Error ? error.message : String(error)}`]
-        }));
-      }
-    }
-
-    preloadMissingHistoricalPrices();
-  }, [assets, transactions]);
-
-  useEffect(() => {
-    if (assets.length === 0) console.warn('[DEBUG] assets está vacío');
-    if (transactions.length === 0) console.warn('[DEBUG] transactions está vacío');
-  }, [assets, transactions]);
-
-  useEffect(() => {
-    async function calcularPatrimonio() {
-      if (transactions.length === 0) {
-        console.warn('[DEBUG] calcularPatrimonio: transactions vacío');
-        return;
-      }
-      // Encontrar la fecha del primer ingreso
-      const primerIngreso = transactions.reduce((min, t) => {
-        // Asegurar que la fecha se convierta correctamente
-        let d: Date;
-        if (typeof t.date === 'string') {
-          d = new Date(t.date);
-        } else if (t.date instanceof Date) {
-          d = t.date;
-        } else {
-          console.error('[DEBUG] Invalid date format in calcularPatrimonio:', t.date, typeof t.date);
-          d = new Date(); // fallback
-        }
-        return (!min || d < min) ? d : min;
-      }, null as Date | null);
-      const hoy = new Date();
-      if (!primerIngreso) {
-        console.warn('[DEBUG] calcularPatrimonio: no hay primerIngreso');
-        return;
-      }
-      
-      // Ajustar fecha de inicio si es futura
-      const startDate = primerIngreso > hoy ? hoy : primerIngreso;
-      console.log(`[DEBUG] calcularPatrimonio: fecha original ${primerIngreso.toISOString().slice(0, 10)}, ajustada a ${startDate.toISOString().slice(0, 10)}`);
-      
-      const fechas = getDateRange(startDate, hoy).filter(f => f <= hoy); // Ignorar fechas futuras
-      let patrimonio: { x: Date, y: number }[] = [];
-      for (const fecha of fechas) {
-        const fechaStr = fecha.toISOString().slice(0, 10);
-        // Dinero líquido hasta la fecha
-        let liquido = 0;
-        transactions.forEach(t => {
-          // En el frontend, t.date siempre es string según el tipo Transaction
-          const tDate = new Date(t.date);
-          if (tDate > fecha) return; // Solo transacciones hasta la fecha actual
-          
-          if (t.type === 'INGRESO') liquido += t.amount;
-          if (t.type === 'RETIRO') liquido -= t.amount;
-          if (t.type === 'COMPRA') liquido -= t.amount;
-          if (t.type === 'VENTA') liquido += t.amount;
-        });
-        // Valor de activos a la fecha (puede ser 0)
-        let valorActivos = 0;
-        try {
-          valorActivos = await getAssetsValueAtDate(assets, transactions, fechaStr, true);
-        } catch (e) {
-          console.error('[DEBUG] Error en getAssetsValueAtDate:', e);
-          valorActivos = 0;
-        }
-        patrimonio.push({ x: fecha, y: liquido + valorActivos });
-      }
-      console.log('[DEBUG] patrimonioSeries calculado:', patrimonio);
-      setPatrimonioSeries(patrimonio);
-    }
-    if (assets.length && transactions.length) calcularPatrimonio();
-  }, [assets, transactions]);
-
-  // Calcular detalles de activos para cada fecha de patrimonioSeries
-  useEffect(() => {
-    async function calcularDetalles() {
-      const detalles: { [fecha: string]: { symbol: string; type: string | undefined; units: number; price: number | null; valor: number }[] } = {};
-      for (const p of patrimonioSeriesRef.current) {
-        const fechaStr = p.x.toISOString().slice(0, 10);
-        detalles[fechaStr] = await getActivosDetallePorFecha(assets, transactions, fechaStr, true);
-      }
-      setActivosDetallePorFecha(detalles);
-    }
-    if (assets.length && transactions.length && patrimonioSeries.length) calcularDetalles();
-  }, [assets, transactions, patrimonioSeries]);
-
-  function calcularSinInvertirSeriesDiario(transactions: Transaction[]): { x: Date, y: number }[] {
-    if (transactions.length === 0) return [];
-    const primerIngreso = transactions.reduce((min, t) => {
-      // Asegurar que la fecha se convierta correctamente
-      let d: Date;
-      if (typeof t.date === 'string') {
-        d = new Date(t.date);
-      } else if (t.date instanceof Date) {
-        d = t.date;
-      } else {
-        console.error('[DEBUG] Invalid date format in calcularSinInvertirSeriesDiario:', t.date, typeof t.date);
-        d = new Date(); // fallback
-      }
-      return (!min || d < min) ? d : min;
-    }, null as Date | null);
-    const hoy = new Date();
-    if (!primerIngreso) return [];
-    
-    // Ajustar fecha de inicio si es futura
-    const startDate = primerIngreso > hoy ? hoy : primerIngreso;
-    console.log(`[DEBUG] calcularSinInvertirSeriesDiario: fecha original ${primerIngreso.toISOString().slice(0, 10)}, ajustada a ${startDate.toISOString().slice(0, 10)}`);
-    
-    const fechas = getDateRange(startDate, hoy);
-    let sinInvertir = 0;
-    const serie: { x: Date, y: number }[] = [];
-    for (const fecha of fechas) {
-      const fechaStr = fecha.toISOString().slice(0, 10);
-      transactions.forEach(t => {
-        // En el frontend, t.date siempre es string según el tipo Transaction
-        const tDateStr = String(t.date).slice(0, 10);
-        
-        if (tDateStr === fechaStr) {
-          if (t.type === 'INGRESO') sinInvertir += t.amount;
-          if (t.type === 'RETIRO') sinInvertir -= t.amount;
-        }
-      });
-      serie.push({ x: fecha, y: sinInvertir });
-    }
-    return serie;
-  }
-
-  const sinInvertirSeries = calcularSinInvertirSeriesDiario(transactions);
 
   if (loading) {
     return (
       <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="400px">
         <CircularProgress />
-        <Typography variant="body2" color="text.secondary" mt={2}>Cargando datos del dashboard...</Typography>
+        <Typography variant="body2" color="text.secondary" mt={2}>
+          Cargando datos del dashboard...
+        </Typography>
       </Box>
     );
   }
@@ -556,168 +217,113 @@ export default function Dashboard() {
   if (error) {
     return (
       <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="400px">
-        <Typography color="error">{error}</Typography>
-        <Typography variant="body2" color="text.secondary" mt={2}>Debug: assetsBase: {JSON.stringify(assetsBase)}<br/>assets: {JSON.stringify(assets)}<br/>transactions: {JSON.stringify(transactions)}</Typography>
-      </Box>
-    );
-  }
-
-  if (!loading && assetsBase.length > 0 && assets.length === 0) {
-    return (
-      <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-        <Typography variant="body2" color="text.secondary" mt={2}>Actualizando precios de los activos...</Typography>
-      </Box>
-    );
-  }
-
-  if (!loading && !error && (assets.length === 0 || transactions.length === 0 || patrimonioSeries.length === 0)) {
-    return (
-      <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center" minHeight="400px">
-        <Typography color="warning.main">No hay datos suficientes para mostrar el dashboard.</Typography>
-        <Typography variant="body2" color="text.secondary" mt={2}>
-          Debug:<br/>
-          assetsBase: {JSON.stringify(assetsBase)}<br/>
-          assets: {JSON.stringify(assets)}<br/>
-          transactions: {JSON.stringify(transactions)}<br/>
-          patrimonioSeries: {JSON.stringify(patrimonioSeries)}
+        <Typography color="error" variant="h6" gutterBottom>
+          Error
+        </Typography>
+        <Typography color="text.secondary" textAlign="center">
+          {error}
         </Typography>
       </Box>
     );
-  }
-
-  const totals = calculateTotals();
-  const pieChartData = preparePieChartData();
-  const performanceData = assets
-    .map(calculatePerformance)
-    .filter((perf): perf is NonNullable<typeof perf> => perf !== null);
-
-  // Calcular rendimiento global (USD)
-  const investedUSD = transactions
-    .filter(t => t.currency === 'USD' && (t.type === 'COMPRA' || t.type === 'INGRESO'))
-    .reduce((acc, t) => acc + t.amount, 0) -
-    transactions.filter(t => t.currency === 'USD' && t.type === 'VENTA').reduce((acc, t) => acc + t.amount, 0);
-  const currentValueUSD = assets.filter(a => a.currency === 'USD').reduce((acc, a) => acc + (a.currentPrice ? a.currentPrice * a.totalUnits : 0), 0);
-  const rendimientoUSD = investedUSD > 0 ? ((currentValueUSD - investedUSD) / investedUSD) * 100 : 0;
-
-  // Mensaje de rendimiento
-  let rendimientoMsg = '';
-  let rendimientoColor = 'info.main';
-  let rendimientoEmoji = '💡';
-  if (rendimientoUSD > 10) {
-    rendimientoMsg = '¡Excelente! Tus inversiones están rindiendo muy bien. ¡Felicitaciones!';
-    rendimientoColor = 'success.main';
-    rendimientoEmoji = '🎉';
-  } else if (rendimientoUSD > 0) {
-    rendimientoMsg = '¡Vas por buen camino! Tus inversiones están en positivo.';
-    rendimientoColor = 'success.light';
-    rendimientoEmoji = '👍';
-  } else if (rendimientoUSD < 0) {
-    rendimientoMsg = 'Atención: tus inversiones están en negativo. Revisa tu estrategia.';
-    rendimientoColor = 'error.main';
-    rendimientoEmoji = '⚠️';
-  } else {
-    rendimientoMsg = 'Aún no hay suficiente información para calcular el rendimiento.';
-    rendimientoColor = 'info.main';
-    rendimientoEmoji = '💡';
   }
 
   return (
     <div>
       <Typography variant="h4" gutterBottom>
-        Dashboard {updatingPrices && <CircularProgress size={20} sx={{ ml: 2 }} />}
+        Dashboard
       </Typography>
 
-      {/* Cartel de valor total del portfolio (ahora arriba de todo) */}
+      {/* Tarjeta del valor total del portfolio */}
       <Paper
         sx={{
-          p: 2,
-          mb: 2,
+          p: 3,
+          textAlign: 'center',
           bgcolor: 'primary.light',
           color: 'white',
-          textAlign: 'center',
+          mb: 3,
         }}
       >
         <Typography variant="h6" gutterBottom>
-          Valor Total del Portfolio
+          Valor Total de tu Cartera
         </Typography>
-        <Typography variant="h3" component="div">
-          USD {totals.totalInvestedUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </Typography>
-        <Typography>
-          ARS {totals.totalInvestedARS.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        <Typography variant="h3" component="div" sx={{ fontWeight: 'bold' }}>
+          USD {totalPortfolioValue.toLocaleString('en-US', { 
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2 
+          })}
         </Typography>
       </Paper>
 
-      {/* Cartel de rendimiento global */}
-      <Paper sx={{ p: 2, mb: 2, bgcolor: rendimientoColor, color: 'white', textAlign: 'center' }}>
-        <Typography variant="h5" gutterBottom>
-          {rendimientoEmoji} Rendimiento Global USD: {rendimientoUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
-        </Typography>
-        <Typography>{rendimientoMsg}</Typography>
-      </Paper>
-
-      {/* Gráfico de evolución del dinero */}
-      <Paper sx={{ p: 2, mb: 2, overflowX: 'auto' }}>
+      {/* Tabla de transacciones */}
+      <Paper sx={{ p: 2, mb: 3 }}>
         <Typography variant="h6" gutterBottom>
-          Evolución real del patrimonio (USD) vs Dinero sin invertir
-        </Typography>
-        <LineChart
-          xAxis={[
-            {
-              scaleType: 'time',
-              data: patrimonioSeries.map(p => p.x),
-              label: 'Fecha',
-              valueFormatter: (date) => date.toLocaleDateString(),
-            },
-          ]}
-          series={[
-            { data: patrimonioSeries.map(p => p.y), label: 'Patrimonio Real', color: '#1976d2' },
-            { data: sinInvertirSeries.map(p => p.y), label: 'Sin Invertir', color: '#e57373' },
-          ]}
-          height={isMobile ? 200 : 300}
-          width={isMobile ? 320 : undefined}
-        />
-      </Paper>
-
-      {/* Tabla de debug: Dinero sin invertir y Patrimonio real por fecha */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Debug: Evolución de Dinero sin Invertir y Patrimonio Real
+          Evolución del Patrimonio
         </Typography>
         <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Fecha</TableCell>
-                <TableCell>Dinero sin invertir (USD)</TableCell>
-                <TableCell>Patrimonio real (USD)</TableCell>
-                <TableCell>Detalle de activos</TableCell>
+                <TableCell>Dinero Líquido (USD)</TableCell>
+                <TableCell>Dinero Invertido (USD)</TableCell>
+                <TableCell>Patrimonio Total (USD)</TableCell>
+                <TableCell>Precio Ethereum (USD)</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {patrimonioSeries.map((p, idx) => {
-                const fechaStr = p.x.toISOString().slice(0, 10);
-                const detalles = activosDetallePorFecha[fechaStr] || [];
+              {dailyData.map((day, index) => {
+                // Recalcular para mostrar los valores desglosados
+                let liquidMoney = 0;
+                let investedMoney = 0;
+                
+                transactions.forEach((transaction: Transaction) => {
+                  const transactionDate = new Date(transaction.date).toISOString().split('T')[0];
+                  if (transactionDate <= day.date) {
+                    if (transaction.type === 'INGRESO') {
+                      liquidMoney += transaction.amount;
+                    } else if (transaction.type === 'RETIRO') {
+                      liquidMoney -= transaction.amount;
+                    } else if (transaction.type === 'COMPRA') {
+                      liquidMoney -= transaction.amount;
+                      investedMoney += transaction.amount;
+                    } else if (transaction.type === 'VENTA') {
+                      liquidMoney += transaction.amount;
+                      investedMoney -= transaction.amount;
+                    }
+                  }
+                });
+                
+                const portfolioValue = liquidMoney + investedMoney;
+                const ethereumPrice = ethereumPrices[day.date] || 0;
+                
                 return (
-                  <TableRow key={p.x.toISOString()}>
-                    <TableCell>{p.x.toLocaleDateString()}</TableCell>
+                  <TableRow key={index}>
                     <TableCell>
-                      {sinInvertirSeries[idx] ? sinInvertirSeries[idx].y.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '-'}
+                      {new Date(day.date).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
-                      {p.y.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      {liquidMoney.toLocaleString('en-US', { 
+                        minimumFractionDigits: 2, 
+                        maximumFractionDigits: 2 
+                      })}
                     </TableCell>
                     <TableCell>
-                      {detalles.length === 0 ? '-' : (
-                        <ul style={{ margin: 0, paddingLeft: 16 }}>
-                          {detalles.map((d) => (
-                            <li key={d.symbol + d.type}>
-                              {d.symbol} ({d.type}): {d.units} u. x ${d.price?.toLocaleString('en-US', { minimumFractionDigits: 2 }) ?? 'N/A'} = <b>${d.valor.toLocaleString('en-US', { minimumFractionDigits: 2 })}</b>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                      {investedMoney.toLocaleString('en-US', { 
+                        minimumFractionDigits: 2, 
+                        maximumFractionDigits: 2 
+                      })}
+                    </TableCell>
+                    <TableCell>
+                      {portfolioValue.toLocaleString('en-US', { 
+                        minimumFractionDigits: 2, 
+                        maximumFractionDigits: 2 
+                      })}
+                    </TableCell>
+                    <TableCell>
+                      {ethereumPrice > 0 ? ethereumPrice.toLocaleString('en-US', { 
+                        minimumFractionDigits: 2, 
+                        maximumFractionDigits: 2 
+                      }) : '-'}
                     </TableCell>
                   </TableRow>
                 );
@@ -726,180 +332,6 @@ export default function Dashboard() {
           </Table>
         </TableContainer>
       </Paper>
-
-      {/* Debug de precarga de precios históricos */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">
-            Debug: Precarga de Precios Históricos
-            {preloadDebug.isPreloading && <CircularProgress size={20} sx={{ ml: 2 }} />}
-          </Typography>
-          <Button 
-            variant="outlined" 
-            onClick={() => {
-              // Forzar recarga de la página para ejecutar la precarga nuevamente
-              window.location.reload();
-            }}
-            disabled={preloadDebug.isPreloading}
-          >
-            Forzar Precarga
-          </Button>
-        </Box>
-        
-        {preloadDebug.currentAsset && (
-          <Typography variant="body2" color="primary" sx={{ mb: 2 }}>
-            Procesando: {preloadDebug.currentAsset}
-          </Typography>
-        )}
-
-        {preloadDebug.errors.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" color="error" gutterBottom>
-              Errores:
-            </Typography>
-            {preloadDebug.errors.map((error, idx) => (
-              <Typography key={idx} variant="body2" color="error" sx={{ ml: 2 }}>
-                • {error}
-              </Typography>
-            ))}
-          </Box>
-        )}
-
-        {preloadDebug.progress.length > 0 && (
-          <Box>
-            <Typography variant="subtitle2" gutterBottom>
-              Progreso:
-            </Typography>
-            {preloadDebug.progress.map((item, idx) => (
-              <Box key={idx} sx={{ mb: 1, ml: 2 }}>
-                <Typography variant="body2" sx={{ 
-                  color: item.status === 'ERROR' ? 'error.main' : 
-                         item.status === 'COMPLETED' ? 'success.main' : 
-                         item.status === 'SKIPPED' ? 'warning.main' : 
-                         item.status === 'PRELOADING' ? 'info.main' : 'text.primary'
-                }}>
-                  <strong>{item.asset}</strong>: {item.details}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-        )}
-
-        {preloadDebug.progress.length === 0 && !preloadDebug.isPreloading && (
-          <Typography variant="body2" color="text.secondary">
-            No hay actividad de precarga
-          </Typography>
-        )}
-      </Paper>
-
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        {/* Primera fila: Totales (ya no incluye el valor total, solo totales invertidos y valor actual) */}
-        <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', flexDirection: isMobile ? 'column' : 'row' }}>
-          <Paper
-            sx={{
-              p: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              height: 140,
-              flex: 1,
-              minWidth: 200,
-              mb: isMobile ? 2 : 0,
-            }}
-          >
-            <Typography variant="h6" gutterBottom>
-              Total Invertido
-            </Typography>
-            <Typography variant="h4" component="div">
-              USD {totals.totalInvestedUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </Typography>
-            <Typography color="text.secondary">
-              ARS {totals.totalInvestedARS.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </Typography>
-          </Paper>
-
-          <Paper
-            sx={{
-              p: 2,
-              display: 'flex',
-              flexDirection: 'column',
-              height: 140,
-              flex: 1,
-              minWidth: 200,
-            }}
-          >
-            <Typography variant="h6" gutterBottom>
-              Valor Actual
-            </Typography>
-            <Typography variant="h4" component="div" color={totals.currentValueUSD >= totals.totalInvestedUSD ? 'success.main' : 'error.main'}>
-              USD {totals.currentValueUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </Typography>
-            <Typography color={totals.currentValueARS >= totals.totalInvestedARS ? 'success.main' : 'error.main'}>
-              ARS {totals.currentValueARS.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </Typography>
-          </Paper>
-        </Box>
-
-        {/* Segunda fila: Gráficos */}
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, flexDirection: isMobile ? 'column' : 'row' }}>
-          {/* Gráfico de Distribución */}
-          <Box sx={{ flex: isMobile ? '1 1 100%' : '1 1 calc(50% - 12px)', minWidth: isMobile ? '100%' : '300px' }}>
-            <Paper sx={{ p: 2, height: isMobile ? 'auto' : '400px', mb: isMobile ? 2 : 0 }}>
-              <Typography variant="h6" gutterBottom>
-                Distribución de Activos
-              </Typography>
-              {pieChartData.length > 0 ? (
-                <PieChart
-                  series={[
-                    {
-                      data: pieChartData,
-                      innerRadius: 30,
-                      paddingAngle: 2,
-                      cornerRadius: 4,
-                    },
-                  ]}
-                  height={isMobile ? 200 : 300}
-                  width={isMobile ? 320 : undefined}
-                />
-              ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 5 }}>
-                  No hay datos suficientes para mostrar el gráfico
-                </Typography>
-              )}
-            </Paper>
-          </Box>
-
-          {/* Rendimiento por Activo */}
-          <Box sx={{ flex: isMobile ? '1 1 100%' : '1 1 calc(50% - 12px)', minWidth: isMobile ? '100%' : '300px' }}>
-            <Paper sx={{ p: 2, height: isMobile ? 'auto' : '400px' }}>
-              <Typography variant="h6" gutterBottom>
-                Distribución por Moneda
-              </Typography>
-              {performanceData.length > 0 ? (
-                <BarChart
-                  xAxis={[{ 
-                    scaleType: 'band', 
-                    data: ['USD', 'ARS']
-                  }]}
-                  series={[
-                    {
-                      data: [
-                        totals.totalInvestedUSD,
-                        totals.totalInvestedARS
-                      ],
-                    },
-                  ]}
-                  height={isMobile ? 200 : 300}
-                  width={isMobile ? 320 : undefined}
-                />
-              ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 5 }}>
-                  No hay datos suficientes para mostrar el gráfico
-                </Typography>
-              )}
-            </Paper>
-          </Box>
-        </Box>
-      </Box>
     </div>
   );
 } 

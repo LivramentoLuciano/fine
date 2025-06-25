@@ -106,7 +106,20 @@ export class HistoricalPriceService {
       let source: PriceSource = 'MANUAL';
 
       if (asset.type === 'CRYPTO') {
-        price = await getHistoricalPriceCoinGecko(asset.symbol, dateStr);
+        // Validación: no permitir fechas de más de 365 días atrás
+        const today = new Date();
+        const diffTime = today.getTime() - date.getTime();
+        const diffDays = diffTime / (1000 * 60 * 60 * 24);
+        if (diffDays > 365) {
+          console.warn(`[HistoricalPrice] Fecha fuera de rango para CoinGecko: ${dateStr} (más de 365 días atrás)`);
+          return null;
+        }
+        // Formatear fecha a DD-MM-YYYY para CoinGecko
+        const day = date.getDate().toString().padStart(2, '0');
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const year = date.getFullYear();
+        const dateStrCoinGecko = `${day}-${month}-${year}`;
+        price = await getHistoricalPriceCoinGecko(asset.symbol, dateStrCoinGecko);
         source = 'COINGECKO';
       } else if (asset.type === 'STOCK' || asset.type === 'FOREX') {
         price = await getHistoricalPriceYahoo(asset.symbol, date);

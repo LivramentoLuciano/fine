@@ -52,9 +52,9 @@ export class HistoricalPriceService {
     endDate: Date
   ): Promise<HistoricalPrice[]> {
     try {
-      // Usar formato ISO completo para mayor compatibilidad
-      const startDateStr = startDate.toISOString();
-      const endDateStr = endDate.toISOString();
+      // Usar formato YYYY-MM-DD que es lo que espera el backend
+      const startDateStr = startDate.toISOString().slice(0, 10);
+      const endDateStr = endDate.toISOString().slice(0, 10);
       
       console.log(`[HistoricalPrice] getHistoricalPrices called with:`, {
         assetId,
@@ -65,6 +65,8 @@ export class HistoricalPriceService {
       });
       
       const response = await api.getHistoricalPrices(assetId, startDateStr, endDateStr);
+      
+      console.log(`[HistoricalPrice] Response from API:`, response);
       
       if (response && response.prices) {
         return response.prices.map((price: any) => ({
@@ -77,6 +79,7 @@ export class HistoricalPriceService {
       return [];
     } catch (error) {
       console.error(`[HistoricalPrice] Error getting historical prices for asset ${assetId}:`, error);
+      // Devolver array vacío para que la aplicación pueda continuar
       return [];
     }
   }

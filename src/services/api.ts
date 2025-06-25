@@ -226,6 +226,15 @@ export const api = {
 
   async getHistoricalPrices(assetId: string, startDate: string, endDate: string) {
     const url = `/historical-prices/${assetId}/range?startDate=${startDate}&endDate=${endDate}`;
+    console.log(`[API] getHistoricalPrices called with:`, {
+      assetId,
+      startDate,
+      endDate,
+      startDateType: typeof startDate,
+      endDateType: typeof endDate,
+      startDateValid: !isNaN(new Date(startDate).getTime()),
+      endDateValid: !isNaN(new Date(endDate).getTime())
+    });
     console.log(`[API] getHistoricalPrices URL: ${url}`);
     return this.get(url);
   },

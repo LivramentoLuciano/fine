@@ -305,6 +305,20 @@ export default function Dashboard() {
           }]
         }));
 
+        // Validar que la primera transacción no sea futura
+        const today = new Date();
+        const startDate = firstTransaction > today ? today : firstTransaction;
+        
+        console.log(`[DEBUG] Usando fecha de inicio: ${startDate.toISOString().slice(0, 10)} (${firstTransaction > today ? 'ajustada a hoy' : 'original'})`);
+        setPreloadDebug(prev => ({ 
+          ...prev, 
+          progress: [...prev.progress, { 
+            asset: 'SYSTEM', 
+            status: 'INFO', 
+            details: `Fecha de inicio ajustada: ${startDate.toISOString().slice(0, 10)}` 
+          }]
+        }));
+
         // Para cada asset, verificar si necesita precarga
         for (const asset of assets) {
           try {
@@ -322,14 +336,14 @@ export default function Dashboard() {
 
             // Verificar si ya tiene precios históricos
             console.log(`[DEBUG] Calling getHistoricalPrices for ${asset.name} with dates:`, {
-              startDate: firstTransaction.toISOString(),
-              endDate: new Date().toISOString()
+              startDate: startDate.toISOString(),
+              endDate: today.toISOString()
             });
             
             const existingPrices = await historicalPriceService.getHistoricalPrices(
               asset.id,
-              firstTransaction,
-              new Date()
+              startDate,
+              today
             );
 
             console.log(`[DEBUG] ${asset.name} tiene ${existingPrices.length} precios históricos`);
@@ -350,13 +364,13 @@ export default function Dashboard() {
                 progress: [...prev.progress, { 
                   asset: asset.name, 
                   status: 'PRELOADING', 
-                  details: `Iniciando precarga desde ${firstTransaction.toISOString().slice(0, 10)} hasta hoy` 
+                  details: `Iniciando precarga desde ${startDate.toISOString().slice(0, 10)} hasta hoy` 
                 }]
               }));
 
               const result = await historicalPriceService.preloadHistoricalPrices(
                 asset.id,
-                firstTransaction
+                startDate
               );
 
               console.log(`[DEBUG] Precarga completada para ${asset.name}:`, result);
@@ -437,7 +451,12 @@ export default function Dashboard() {
         console.warn('[DEBUG] calcularPatrimonio: no hay primerIngreso');
         return;
       }
-      const fechas = getDateRange(primerIngreso, hoy).filter(f => f <= hoy); // Ignorar fechas futuras
+      
+      // Ajustar fecha de inicio si es futura
+      const startDate = primerIngreso > hoy ? hoy : primerIngreso;
+      console.log(`[DEBUG] calcularPatrimonio: fecha original ${primerIngreso.toISOString().slice(0, 10)}, ajustada a ${startDate.toISOString().slice(0, 10)}`);
+      
+      const fechas = getDateRange(startDate, hoy).filter(f => f <= hoy); // Ignorar fechas futuras
       let patrimonio: { x: Date, y: number }[] = [];
       for (const fecha of fechas) {
         const fechaStr = fecha.toISOString().slice(0, 10);
@@ -499,7 +518,12 @@ export default function Dashboard() {
     }, null as Date | null);
     const hoy = new Date();
     if (!primerIngreso) return [];
-    const fechas = getDateRange(primerIngreso, hoy);
+    
+    // Ajustar fecha de inicio si es futura
+    const startDate = primerIngreso > hoy ? hoy : primerIngreso;
+    console.log(`[DEBUG] calcularSinInvertirSeriesDiario: fecha original ${primerIngreso.toISOString().slice(0, 10)}, ajustada a ${startDate.toISOString().slice(0, 10)}`);
+    
+    const fechas = getDateRange(startDate, hoy);
     let sinInvertir = 0;
     const serie: { x: Date, y: number }[] = [];
     for (const fecha of fechas) {

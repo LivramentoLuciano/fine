@@ -52,8 +52,9 @@ export class HistoricalPriceService {
     endDate: Date
   ): Promise<HistoricalPrice[]> {
     try {
-      const startDateStr = startDate.toISOString().slice(0, 10);
-      const endDateStr = endDate.toISOString().slice(0, 10);
+      // Usar formato ISO completo para mayor compatibilidad
+      const startDateStr = startDate.toISOString();
+      const endDateStr = endDate.toISOString();
       
       console.log(`[HistoricalPrice] getHistoricalPrices called with:`, {
         assetId,

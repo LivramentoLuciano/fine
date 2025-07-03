@@ -19,11 +19,41 @@ const COINGECKO_IDS = [
 
 // Función para convertir de PrismaTransaction a Transaction
 function convertPrismaTransactionToTransaction(prismaTransaction: any): Transaction {
+  // Railway almacena fechas en UTC, pero cuando creamos new Date() 
+  // JavaScript las interpreta como si fueran locales
+  // Necesitamos tratarlas como UTC y convertirlas correctamente
+  
+  // Función para normalizar fechas de Railway
+  const normalizeRailwayDate = (dateInput: any): Date => {
+    if (!dateInput) return new Date();
+    
+    // Si ya es un objeto Date, devolverlo
+    if (dateInput instanceof Date) return dateInput;
+    
+    // Si es string, crear fecha UTC
+    const dateString = String(dateInput);
+    
+    // Si ya tiene 'T' y 'Z', ya está en formato ISO UTC
+    if (dateString.includes('T') && dateString.includes('Z')) {
+      return new Date(dateString);
+    }
+    
+    // Si es una fecha de Railway en formato "YYYY-MM-DD HH:mm:ss"
+    if (dateString.includes(' ') && !dateString.includes('T')) {
+      // Crear fecha UTC y convertir a local
+      const [datePart, timePart] = dateString.split(' ');
+      return new Date(`${datePart}T${timePart}Z`);
+    }
+    
+    // Para otros formatos, intentar parsear normalmente
+    return new Date(dateString);
+  };
+  
   return {
     ...prismaTransaction,
-    date: new Date(prismaTransaction.date),
-    createdAt: new Date(prismaTransaction.createdAt),
-    updatedAt: new Date(prismaTransaction.updatedAt),
+    date: normalizeRailwayDate(prismaTransaction.date),
+    createdAt: normalizeRailwayDate(prismaTransaction.createdAt),
+    updatedAt: normalizeRailwayDate(prismaTransaction.updatedAt),
   };
 }
 
@@ -36,9 +66,13 @@ export class TransactionService {
         throw new Error(`El id de CoinGecko '${data.assetName}' no es válido o no está soportado. Selecciona la criptomoneda desde la lista.`);
       }
     }
+    
+    // Normalizar la fecha para asegurar que se guarde correctamente en Railway
+    const normalizedDate = data.date instanceof Date ? data.date : new Date(data.date);
+    
     const transaction = await prisma.transaction.create({
       data: {
-        date: new Date(data.date),
+        date: normalizedDate,
         type: data.type,
         amount: data.amount,
         currency: data.currency,
@@ -132,11 +166,14 @@ export class TransactionService {
       throw new Error('Transacción no encontrada');
     }
 
+    // Normalizar la fecha si se está actualizando
+    const normalizedDate = data.date ? (data.date instanceof Date ? data.date : new Date(data.date)) : undefined;
+
     const updatedTransaction = await prisma.transaction.update({
       where: { id },
       data: {
         ...data,
-        date: data.date ? new Date(data.date) : undefined,
+        date: normalizedDate,
       },
     });
 
